@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_theme.dart';
+import 'adaptive_field_shell.dart';
 import 'adaptive_widget.dart';
 
 /// Campo de texto com label e mensagem de erro.
@@ -70,13 +70,7 @@ class AdaptiveTextField extends AdaptiveWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 6),
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-          ),
-        ),
+        CupertinoFieldStyle.label(label),
         CupertinoTextField(
           controller: controller,
           placeholder: placeholder,
@@ -98,20 +92,9 @@ class AdaptiveTextField extends AdaptiveWidget {
           suffix: suffix == null
               ? null
               : Padding(padding: const EdgeInsets.only(right: 12), child: suffix),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppTheme.radius),
-            border: Border.all(color: hasError ? AppColors.danger : AppColors.border),
-          ),
+          decoration: CupertinoFieldStyle.box(hasError: hasError),
         ),
-        if (hasError)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, top: 6),
-            child: Text(
-              errorText!,
-              style: const TextStyle(fontSize: 12, color: AppColors.danger),
-            ),
-          ),
+        if (hasError) CupertinoFieldStyle.error(errorText!),
       ],
     );
   }

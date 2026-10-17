@@ -1,26 +1,17 @@
-import 'package:flutter/widgets.dart';
-
-import '../core/utils/validators.dart';
 import '../models/empresa.dart';
 import '../models/usuario.dart';
 import '../services/empresa_service.dart';
 import 'base_controller.dart';
+import 'empresa_form.dart';
 
-/// Controller da tela "Confirmar Dados da Empresa".
+/// Controller da tela "Confirmar Dados da Empresa" (primeiro acesso).
 /// Consulta o CNPJ na API pública, deixa o usuário revisar e salva no perfil.
 class ConfirmarEmpresaController extends BaseController {
   final EmpresaService _empresaService;
   final Usuario usuario;
+  final empresaForm = EmpresaForm();
 
   ConfirmarEmpresaController(this._empresaService, this.usuario);
-
-  final razaoSocialController = TextEditingController();
-  final nomeFantasiaController = TextEditingController();
-  final cnaeController = TextEditingController();
-  final porteController = TextEditingController();
-  final enderecoController = TextEditingController();
-
-  String? razaoSocialError;
 
   Empresa? _empresa;
   Empresa? get empresa => _empresa;
@@ -28,32 +19,13 @@ class ConfirmarEmpresaController extends BaseController {
   Future<void> carregar() async {
     await runAsync(() async {
       _empresa = await _empresaService.consultarCnpj(usuario.cnpj);
-      _preencherCampos(_empresa!);
+      empresaForm.preencher(_empresa!);
     });
-  }
-
-  void _preencherCampos(Empresa e) {
-    razaoSocialController.text = e.razaoSocial;
-    nomeFantasiaController.text = e.nomeFantasia;
-    cnaeController.text = e.cnae;
-    porteController.text = e.porte;
-    enderecoController.text = e.endereco;
   }
 
   Future<bool> confirmar() async {
     if (_empresa == null) return false;
-
-    razaoSocialError = Validators.obrigatorio(razaoSocialController.text, 'a razão social');
-    notify();
-    if (razaoSocialError != null) return false;
-
-    final atualizada = _empresa!.copyWith(
-      razaoSocial: razaoSocialController.text.trim(),
-      nomeFantasia: nomeFantasiaController.text.trim(),
-      cnae: cnaeController.text.trim(),
-      porte: porteController.text.trim(),
-      endereco: enderecoController.text.trim(),
-    );
+    final atualizada = empresaForm.paraEmpresa(usuario.cnpj);
     return runAsync(() async {
       await _empresaService.salvarPerfil(atualizada);
       _empresa = atualizada;
@@ -62,11 +34,7 @@ class ConfirmarEmpresaController extends BaseController {
 
   @override
   void dispose() {
-    razaoSocialController.dispose();
-    nomeFantasiaController.dispose();
-    cnaeController.dispose();
-    porteController.dispose();
-    enderecoController.dispose();
+    empresaForm.dispose();
     super.dispose();
   }
 }

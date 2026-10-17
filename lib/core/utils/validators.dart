@@ -34,6 +34,12 @@ abstract final class Validators {
     return null;
   }
 
+  static String? confirmarSenha(String value, String senha) {
+    if (value.isEmpty) return 'Confirme a senha.';
+    if (value != senha) return 'As senhas não coincidem.';
+    return null;
+  }
+
   static String? obrigatorio(String value, String campo) {
     return value.trim().isEmpty ? 'Informe $campo.' : null;
   }

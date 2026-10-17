@@ -11,8 +11,13 @@ class AuthCard extends StatelessWidget {
   static const double _breakpoint = 600;
 
   final Widget child;
+  final EdgeInsetsGeometry padding;
 
-  const AuthCard({super.key, required this.child});
+  const AuthCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.fromLTRB(28, 56, 28, 40),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +30,7 @@ class AuthCard extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: maxWidth),
           child: isWide
               ? Container(
-                  padding: const EdgeInsets.fromLTRB(28, 56, 28, 40),
+                  padding: padding,
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(36),

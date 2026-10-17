@@ -43,14 +43,7 @@ class _LoginViewState extends State<LoginView> {
     Navigator.of(context).pushReplacementNamed(rota, arguments: usuario);
   }
 
-  void _criarConta() {
-    // TODO: navegar para a tela de cadastro (CNPJ, e-mail e senha) quando ela existir.
-    AdaptiveDialog.showMessage(
-      context,
-      title: 'Em breve',
-      message: 'A tela de cadastro será a próxima etapa.',
-    );
-  }
+  void _criarConta() => Navigator.of(context).pushNamed(AppRoutes.cadastro);
 
   @override
   Widget build(BuildContext context) {

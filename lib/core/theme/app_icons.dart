@@ -16,5 +16,10 @@ abstract final class AppIcons {
   static IconData get hidden => _ios ? CupertinoIcons.eye_slash : Icons.visibility_off_outlined;
   static IconData get upload => _ios ? CupertinoIcons.cloud_upload : Icons.upload_file;
   static IconData get document => _ios ? CupertinoIcons.doc_text : Icons.description_outlined;
+  static IconData get back => _ios ? CupertinoIcons.back : Icons.arrow_back_ios_new;
+  static IconData get at => _ios ? CupertinoIcons.at : Icons.alternate_email;
+  static IconData get calendar => _ios ? CupertinoIcons.calendar : Icons.calendar_today_outlined;
+  static IconData get chevronDown => _ios ? CupertinoIcons.chevron_down : Icons.expand_more;
+  static IconData get location => _ios ? CupertinoIcons.location : Icons.location_on_outlined;
   static IconData get logout => _ios ? CupertinoIcons.square_arrow_right : Icons.logout;
 }

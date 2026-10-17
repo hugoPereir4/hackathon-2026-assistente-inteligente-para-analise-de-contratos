@@ -13,12 +13,13 @@ class Usuario {
     required this.primeiroAcesso,
   });
 
+  /// `confirmed` vem do banco: conta ainda não confirmada = primeiro acesso.
   factory Usuario.fromJson(Map<String, dynamic> json) {
     return Usuario(
       email: json['email'] as String,
       cnpj: json['cnpj'] as String,
       token: json['token'] as String,
-      primeiroAcesso: json['primeiro_acesso'] as bool? ?? false,
+      primeiroAcesso: !(json['confirmed'] as bool? ?? false),
     );
   }
 }

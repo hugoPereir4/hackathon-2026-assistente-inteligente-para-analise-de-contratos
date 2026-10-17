@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../controllers/confirmar_empresa_controller.dart';
@@ -8,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/cnpj.dart';
 import '../../../models/usuario.dart';
 import '../../components/components.dart';
+import '../../shared/empresa_form_fields.dart';
 
 /// Tela simples para o usuário revisar os dados vindos da API de CNPJ.
 class ConfirmarEmpresaView extends StatefulWidget {
@@ -81,7 +81,6 @@ class _ConfirmarEmpresaViewState extends State<ConfirmarEmpresaView> {
   }
 
   Widget _buildFormulario() {
-    const gap = SizedBox(height: AppTheme.spacing);
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppTheme.spacing * 1.5),
@@ -94,30 +93,7 @@ class _ConfirmarEmpresaViewState extends State<ConfirmarEmpresaView> {
               const SizedBox(height: 4),
               AppText.caption('CNPJ ${Cnpj.format(widget.usuario.cnpj)}'),
               const SizedBox(height: 20),
-              AdaptiveTextField(
-                controller: _controller.razaoSocialController,
-                label: 'Razão social',
-                errorText: _controller.razaoSocialError,
-              ),
-              gap,
-              AdaptiveTextField(
-                controller: _controller.nomeFantasiaController,
-                label: 'Nome fantasia',
-              ),
-              gap,
-              AdaptiveTextField(
-                controller: _controller.cnaeController,
-                label: 'CNAE principal',
-                maxLines: 2,
-              ),
-              gap,
-              AdaptiveTextField(controller: _controller.porteController, label: 'Porte'),
-              gap,
-              AdaptiveTextField(
-                controller: _controller.enderecoController,
-                label: 'Endereço',
-                textInputAction: TextInputAction.done,
-              ),
+              EmpresaFormFields(form: _controller.empresaForm),
               const SizedBox(height: 28),
               AdaptiveButton(
                 label: 'Confirmar dados',

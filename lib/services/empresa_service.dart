@@ -1,4 +1,5 @@
 import '../models/empresa.dart';
+import '../models/porte_empresa.dart';
 
 /// Contrato para buscar e salvar o perfil da empresa.
 abstract class EmpresaService {
@@ -20,11 +21,11 @@ class MockEmpresaService implements EmpresaService {
     return Empresa(
       cnpj: cnpj,
       razaoSocial: 'Empresa Exemplo Tecnologia LTDA',
-      nomeFantasia: 'Exemplo Tech',
       cnae: '6201-5/01 - Desenvolvimento de software sob encomenda',
-      porte: 'ME',
-      endereco: 'Av. Alberto Torres, 111 - Teresópolis/RJ',
+      porte: PorteEmpresa.me,
       dataFundacao: DateTime(2018, 3, 12),
+      cidade: 'Teresópolis',
+      uf: 'RJ',
     );
   }
 
