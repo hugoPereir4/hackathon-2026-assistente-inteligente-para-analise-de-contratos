@@ -41,14 +41,12 @@ Cria a empresa e já retorna os tokens, então não é preciso chamar o login em
 | `email`      | string | Sim         | Salvo em minúsculas. Deve ser único. |
 | `password`   | string | Sim         | Passa pelos validadores do Django: mínimo 8 caracteres, não pode ser só numérica, comum ou parecida com o email. |
 | `cnpj`       | string | Sim         | Aceita com ou sem pontuação (`12.345.678/0001-95` ou `12345678000195`), numérico ou alfanumérico. Salvo só com os 14 caracteres. Deve ser único. |
-| `legal_name` | string | Não         | Razão social. |
 
 ```json
 {
   "email": "contato@empresa.com.br",
   "password": "SenhaForte123",
-  "cnpj": "12.345.678/0001-95",
-  "legal_name": "Empresa Exemplo LTDA"
+  "cnpj": "12.345.678/0001-95"
 }
 ```
 
@@ -59,8 +57,7 @@ Cria a empresa e já retorna os tokens, então não é preciso chamar o login em
   "user": {
     "id": 1,
     "email": "contato@empresa.com.br",
-    "cnpj": "12345678000195",
-    "legal_name": "Empresa Exemplo LTDA"
+    "cnpj": "12345678000195"
   },
   "access": "<jwt>",
   "refresh": "<jwt>"

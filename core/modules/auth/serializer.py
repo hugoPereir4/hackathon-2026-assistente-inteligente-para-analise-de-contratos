@@ -26,7 +26,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Company
-        fields = ("id", "email", "password", "cnpj", "legal_name")
+        fields = ("id", "email", "password", "cnpj")
         read_only_fields = ("id",)
         extra_kwargs = {"email": {"validators": []}}
 
