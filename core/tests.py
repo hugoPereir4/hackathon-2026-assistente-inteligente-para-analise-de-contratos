@@ -1,20 +1,20 @@
 import os
 import shutil
 import tempfile
-from io import BytesIO
 
-from PyPDF2 import PdfWriter
-
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import Company
+from core.test_document_upload import pdf_bytes
 
 
 class DocumentApiTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.media_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.media_dir, ignore_errors=True)
         media_settings = override_settings(MEDIA_ROOT=self.media_dir)
@@ -35,11 +35,7 @@ class DocumentApiTests(APITestCase):
 
     def _pdf_upload(self, name="contract.pdf", content=None):
         if content is None:
-            buffer = BytesIO()
-            writer = PdfWriter()
-            writer.add_blank_page(width=300, height=300)
-            writer.write(buffer)
-            content = buffer.getvalue()
+            content = pdf_bytes()
         return SimpleUploadedFile(name, content, content_type="application/pdf")
 
     def test_upload_and_list_only_current_company_documents(self):

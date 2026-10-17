@@ -4,6 +4,7 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.db import close_old_connections, connection
 from django.test import override_settings
 from google import genai
@@ -39,6 +40,7 @@ def provider_response(payload):
 @override_settings(GOOGLE_AI_API_KEY="test-key", GOOGLE_AI_MODEL="test-model")
 class AnswerFlowTests(APITransactionTestCase):
     def setUp(self):
+        cache.clear()
         self.company = Company.objects.create(
             email="answers@example.com", cnpj="12345678000199", confirmed=True,
         )

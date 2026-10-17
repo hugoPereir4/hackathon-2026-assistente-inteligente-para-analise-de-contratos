@@ -155,9 +155,25 @@ Authorization: Bearer <access>
 | POST | `documents/{id}/answers/{batch_id}/confirm/` | Confirmar fatos e reavaliar. |
 | POST | `documents/{id}/reanalyze/` | Reavaliar um documento com análise existente. |
 
+### Upload de documentos
+
 O upload usa `multipart/form-data`, com o arquivo em `file` e `doc_type` opcional:
 `contract`, `tender` ou `proposal`. São aceitos PDFs de até **10 MB**, limite definido
 por `MAX_DOCUMENT_UPLOAD_SIZE`.
+
+Os arquivos são armazenados localmente sob `MEDIA_ROOT` e abertos pelo storage
+do Django para extração. O texto é extraído durante o upload e salvo em
+`Document.text_content`. O caminho de armazenamento e o texto extraído não são
+expostos na resposta da API; não há endpoint de download nesta etapa.
+
+PDFs corrompidos ou protegidos por senha retornam `400`, com erro no campo
+`file`. Falhas de extração ou persistência removem o arquivo salvo para evitar
+arquivos órfãos. A exclusão de um documento remove o registro e o arquivo.
+
+PDFs sem texto são aceitos com `text_content` vazio; não há OCR nesta etapa.
+A análise por IA exige texto extraído não vazio.
+
+### Consulta de documentos
 
 A listagem é paginada e inclui `score`, `cobertura` e `outcome`. O detalhe também
 retorna `analysis_json` e `analysis_desatualizada`, que compara o perfil atual com
@@ -185,6 +201,11 @@ cálculo dos indicadores, isolamento entre empresas, confirmação de fatos,
 concorrência e preservação dos resultados em caso de falha. Também verificam a
 serialização dos schemas pelo SDK real com o transporte HTTP simulado.
 
+Os testes de upload usam PDFs reais, autenticação JWT, banco de teste e
+armazenamento temporário. Verificam extração de texto, limite de tamanho,
+arquivos inválidos ou protegidos, isolamento entre empresas e remoção dos
+arquivos após exclusão ou falhas de processamento.
+
 ## Organização do projeto
 
 ```text
@@ -197,6 +218,7 @@ core/
 │   ├── company/              Perfil da empresa
 │   └── documents/            Upload, análise, respostas e reavaliação
 ├── tests.py                  Testes da API de documentos
+├── test_document_upload.py   Testes de upload, extração e armazenamento
 ├── test_analysis.py          Testes da análise contextual
 └── test_answers.py           Testes do ciclo de respostas
 ```

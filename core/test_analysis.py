@@ -6,6 +6,7 @@ from unittest.mock import patch
 from google import genai
 from google.genai import errors, types
 
+from django.core.cache import cache
 from django.test import override_settings
 from rest_framework.test import APITestCase
 
@@ -54,6 +55,7 @@ def parse(payload):
 @override_settings(GOOGLE_AI_API_KEY="test-key", GOOGLE_AI_MODEL="test-model")
 class AnalysisTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.company = Company.objects.create(
             email="private@example.com", cnpj="12345678000199", legal_name="Exemplo",
             confirmed=True, founded_on=date(2020, 1, 1),
