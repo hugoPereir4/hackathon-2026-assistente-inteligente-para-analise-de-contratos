@@ -1,6 +1,10 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
-from core.views import ViewCompanyMe, ViewRegister, ViewTokenObtainPair
+
+from core.views import ViewCompanyMe, DocumentViewSet, ViewRegister, ViewTokenObtainPair
+
+router = DefaultRouter()
+router.register(r"documents", DocumentViewSet, basename="document")
 
 
 urlpatterns = [

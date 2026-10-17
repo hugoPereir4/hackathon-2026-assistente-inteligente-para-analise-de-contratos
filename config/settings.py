@@ -36,6 +36,8 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
+# Configurações de APIs externas
+GOOGLE_AI_API_KEY = os.getenv("GOOGLE_AI_API_KEY")
 
 # Application definition
 
@@ -129,6 +131,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+MAX_DOCUMENT_UPLOAD_SIZE = 10 * 1024 * 1024
 
 
 # Email
