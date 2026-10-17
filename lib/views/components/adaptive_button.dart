@@ -17,6 +17,9 @@ class AdaptiveButton extends AdaptiveWidget {
   final AdaptiveButtonVariant variant;
   final IconData? icon;
 
+  /// `true` ocupa toda a largura disponível; `false` ajusta ao conteúdo.
+  final bool expanded;
+
   const AdaptiveButton({
     super.key,
     required this.label,
@@ -24,6 +27,7 @@ class AdaptiveButton extends AdaptiveWidget {
     this.isLoading = false,
     this.variant = AdaptiveButtonVariant.primary,
     this.icon,
+    this.expanded = true,
   });
 
   const AdaptiveButton.secondary({
@@ -32,6 +36,7 @@ class AdaptiveButton extends AdaptiveWidget {
     required this.onPressed,
     this.isLoading = false,
     this.icon,
+    this.expanded = true,
   }) : variant = AdaptiveButtonVariant.secondary;
 
   bool get _isPrimary => variant == AdaptiveButtonVariant.primary;
@@ -49,9 +54,15 @@ class AdaptiveButton extends AdaptiveWidget {
 
   @override
   Widget buildMaterial(BuildContext context) {
+    final style = expanded
+        ? null
+        : const ButtonStyle(
+            minimumSize: WidgetStatePropertyAll(Size(0, AppTheme.buttonHeight)),
+            padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 28)),
+          );
     return _isPrimary
-        ? FilledButton(onPressed: _callback, child: _content(Colors.white))
-        : OutlinedButton(onPressed: _callback, child: _content(AppColors.primary));
+        ? FilledButton(onPressed: _callback, style: style, child: _content(Colors.white))
+        : OutlinedButton(onPressed: _callback, style: style, child: _content(AppColors.primary));
   }
 
   @override
@@ -59,7 +70,7 @@ class AdaptiveButton extends AdaptiveWidget {
     final radius = BorderRadius.circular(AppTheme.buttonRadius);
     if (_isPrimary) {
       return SizedBox(
-        width: double.infinity,
+        width: expanded ? double.infinity : null,
         height: AppTheme.buttonHeight,
         child: CupertinoButton.filled(
           onPressed: _callback,
@@ -69,7 +80,7 @@ class AdaptiveButton extends AdaptiveWidget {
       );
     }
     return Container(
-      width: double.infinity,
+      width: expanded ? double.infinity : null,
       height: AppTheme.buttonHeight,
       decoration: BoxDecoration(
         borderRadius: radius,

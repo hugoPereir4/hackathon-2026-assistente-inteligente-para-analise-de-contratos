@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_colors.dart';
 import 'adaptive_widget.dart';
 
 /// Estrutura de tela: Scaffold + AppBar (Material) ou
@@ -43,6 +44,11 @@ class AdaptiveScaffold extends AdaptiveWidget {
       navigationBar: title == null
           ? null
           : CupertinoNavigationBar(
+              // Sem isso o iOS deixa a barra transparente até o conteúdo rolar,
+              // e o título branco some sobre o fundo claro.
+              automaticBackgroundVisibility: false,
+              backgroundColor: AppColors.primary,
+              border: null,
               middle: Text(title!),
               automaticallyImplyLeading: showBackButton,
               trailing: actions.isEmpty

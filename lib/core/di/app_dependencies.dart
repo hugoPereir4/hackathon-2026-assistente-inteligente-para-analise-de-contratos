@@ -1,5 +1,7 @@
 import '../../services/auth_service.dart';
+import '../../services/documento_service.dart';
 import '../../services/empresa_service.dart';
+import '../../services/seletor_arquivo_service.dart';
 
 /// Ponto único onde as implementações dos services são escolhidas.
 /// Quando a API Django estiver pronta, troque os Mock* pelas versões HTTP aqui.
@@ -10,4 +12,6 @@ class AppDependencies {
 
   final AuthService authService = MockAuthService();
   final EmpresaService empresaService = MockEmpresaService();
+  final DocumentoService documentoService = MockDocumentoService();
+  final SeletorArquivoService seletorArquivoService = FilePickerSeletorArquivoService();
 }
