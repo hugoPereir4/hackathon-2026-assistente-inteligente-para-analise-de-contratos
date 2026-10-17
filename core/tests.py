@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 from unittest.mock import patch
 
 from core.models import Company
+from core.test_document_upload import pdf_bytes
 
 
 class DocumentApiTests(APITestCase):
@@ -31,7 +32,9 @@ class DocumentApiTests(APITestCase):
         )
         self.client.force_authenticate(user=self.company)
 
-    def _pdf_upload(self, name="contract.pdf", content=b"%PDF-1.4\nexample"):
+    def _pdf_upload(self, name="contract.pdf", content=None):
+        if content is None:
+            content = pdf_bytes()
         return SimpleUploadedFile(name, content, content_type="application/pdf")
 
     def test_upload_and_list_only_current_company_documents(self):
@@ -111,10 +114,14 @@ class DocumentApiTests(APITestCase):
         self.assertFalse(self.company.documents.filter(pk=document_id).exists())
         self.assertFalse(os.path.exists(stored_path))
 
-    @patch("core.modules.documents.service.ai_service.requests.post")
-    def test_analyze_document_with_ai(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {"summary": "Resumo gerado pela IA"}
+    @override_settings(GOOGLE_AI_API_KEY="test-key-not-real")
+    @patch("core.modules.documents.service.ai_service.genai.Client")
+    def test_analyze_document_with_ai(self, mock_client):
+        mock_client.return_value.models.generate_content.return_value.text = (
+            '{"resumo": "Resumo gerado pela IA", "prazos": "Não informados", '
+            '"valores": "Não informados", "riscos": "Dados insuficientes", '
+            '"score_aderencia": 50, "outcome": "insufficient_data"}'
+        )
 
         document = self.company.documents.create(
             filename="example.pdf",
@@ -126,4 +133,12 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         document.refresh_from_db()
         self.assertEqual(document.status, "ready")
-        self.assertEqual(document.analysis_json, {"summary": "Resumo gerado pela IA"})
+        self.assertEqual(document.analysis_json, {
+            "resumo": "Resumo gerado pela IA",
+            "prazos": "Não informados",
+            "valores": "Não informados",
+            "riscos": "Dados insuficientes",
+        })
+        self.assertEqual(document.score, 50)
+        self.assertEqual(document.outcome, "insufficient_data")
+        mock_client.return_value.models.generate_content.assert_called_once()
