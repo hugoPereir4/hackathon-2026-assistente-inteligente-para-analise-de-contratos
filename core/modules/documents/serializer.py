@@ -9,11 +9,21 @@ from core.modules.documents.service.document_service import create_document
 
 class DocumentSerializer(serializers.ModelSerializer):
     file = serializers.FileField(write_only=True)
+    cobertura = serializers.SerializerMethodField()
 
     class Meta:
         model = Document
-        fields = ("id", "doc_type", "filename", "status", "created_at", "file")
-        read_only_fields = ("id", "filename", "status", "created_at")
+        fields = (
+            "id", "doc_type", "filename", "status", "created_at", "file",
+            "score", "outcome", "cobertura",
+        )
+        read_only_fields = (
+            "id", "filename", "status", "created_at", "score", "outcome", "cobertura",
+        )
+
+    def get_cobertura(self, instance):
+        analysis = instance.analysis_json or {}
+        return analysis.get("aderencia", {}).get("cobertura")
 
     def validate_file(self, uploaded_file):
         filename = uploaded_file.name.replace("\\", "/")
@@ -42,3 +52,9 @@ class DocumentSerializer(serializers.ModelSerializer):
             uploaded_file=uploaded_file,
             doc_type=validated_data.get("doc_type"),
         )
+
+
+class DocumentDetailSerializer(DocumentSerializer):
+    class Meta(DocumentSerializer.Meta):
+        fields = DocumentSerializer.Meta.fields + ("analysis_json",)
+        read_only_fields = DocumentSerializer.Meta.read_only_fields + ("analysis_json",)

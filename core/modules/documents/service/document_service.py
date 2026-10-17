@@ -12,7 +12,7 @@ def extract_text_from_pdf(file_path: str) -> str:
         reader = PyPDF2.PdfReader(pdf_file)
         text = ""
         for page in reader.pages:
-            text += page.extract_text()
+            text += (page.extract_text() or "") + "\n"
         return text.strip()
 
 def create_document(*, company: Company, uploaded_file, doc_type: str | None) -> Document:
@@ -22,7 +22,7 @@ def create_document(*, company: Company, uploaded_file, doc_type: str | None) ->
 
     try:
         # Extrai o texto do PDF
-        text_content = extract_text_from_pdf(saved_path)
+        text_content = extract_text_from_pdf(default_storage.path(saved_path))
 
         return Document.objects.create(
             company=company,

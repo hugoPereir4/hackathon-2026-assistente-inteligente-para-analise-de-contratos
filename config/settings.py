@@ -38,6 +38,7 @@ ALLOWED_HOSTS = [
 
 # Configurações de APIs externas
 GOOGLE_AI_API_KEY = os.getenv("GOOGLE_AI_API_KEY")
+GOOGLE_AI_MODEL = (os.getenv("GOOGLE_AI_MODEL") or "").strip() or "gemini-3.5-flash-lite"
 
 # Application definition
 

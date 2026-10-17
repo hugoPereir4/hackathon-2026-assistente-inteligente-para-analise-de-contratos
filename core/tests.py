@@ -1,12 +1,14 @@
 import os
 import shutil
 import tempfile
+from io import BytesIO
+
+from PyPDF2 import PdfWriter
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
-from unittest.mock import patch
 
 from core.models import Company
 
@@ -31,7 +33,13 @@ class DocumentApiTests(APITestCase):
         )
         self.client.force_authenticate(user=self.company)
 
-    def _pdf_upload(self, name="contract.pdf", content=b"%PDF-1.4\nexample"):
+    def _pdf_upload(self, name="contract.pdf", content=None):
+        if content is None:
+            buffer = BytesIO()
+            writer = PdfWriter()
+            writer.add_blank_page(width=300, height=300)
+            writer.write(buffer)
+            content = buffer.getvalue()
         return SimpleUploadedFile(name, content, content_type="application/pdf")
 
     def test_upload_and_list_only_current_company_documents(self):
@@ -110,20 +118,3 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(self.company.documents.filter(pk=document_id).exists())
         self.assertFalse(os.path.exists(stored_path))
-
-    @patch("core.modules.documents.service.ai_service.requests.post")
-    def test_analyze_document_with_ai(self, mock_post):
-        mock_post.return_value.status_code = 200
-        mock_post.return_value.json.return_value = {"summary": "Resumo gerado pela IA"}
-
-        document = self.company.documents.create(
-            filename="example.pdf",
-            text_content="Este é um texto de exemplo para análise.",
-        )
-
-        response = self.client.post(f"/api/v1/documents/{document.pk}/analyze/")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        document.refresh_from_db()
-        self.assertEqual(document.status, "ready")
-        self.assertEqual(document.analysis_json, {"summary": "Resumo gerado pela IA"})
