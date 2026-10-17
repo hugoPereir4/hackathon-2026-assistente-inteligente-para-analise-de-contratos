@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import DatabaseError
@@ -57,6 +58,7 @@ class DocumentUploadTests(APITestCase):
         )
 
     def setUp(self):
+        cache.clear()
         media = TemporaryDirectory()
         self.addCleanup(media.cleanup)
         self.media = Path(media.name)

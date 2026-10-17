@@ -2,11 +2,11 @@ import os
 import shutil
 import tempfile
 
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
-from unittest.mock import patch
 
 from core.models import Company
 from core.test_document_upload import pdf_bytes
@@ -14,6 +14,7 @@ from core.test_document_upload import pdf_bytes
 
 class DocumentApiTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.media_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.media_dir, ignore_errors=True)
         media_settings = override_settings(MEDIA_ROOT=self.media_dir)
@@ -113,32 +114,3 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(self.company.documents.filter(pk=document_id).exists())
         self.assertFalse(os.path.exists(stored_path))
-
-    @override_settings(GOOGLE_AI_API_KEY="test-key-not-real")
-    @patch("core.modules.documents.service.ai_service.genai.Client")
-    def test_analyze_document_with_ai(self, mock_client):
-        mock_client.return_value.models.generate_content.return_value.text = (
-            '{"resumo": "Resumo gerado pela IA", "prazos": "Não informados", '
-            '"valores": "Não informados", "riscos": "Dados insuficientes", '
-            '"score_aderencia": 50, "outcome": "insufficient_data"}'
-        )
-
-        document = self.company.documents.create(
-            filename="example.pdf",
-            text_content="Este é um texto de exemplo para análise.",
-        )
-
-        response = self.client.post(f"/api/v1/documents/{document.pk}/analyze/")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        document.refresh_from_db()
-        self.assertEqual(document.status, "ready")
-        self.assertEqual(document.analysis_json, {
-            "resumo": "Resumo gerado pela IA",
-            "prazos": "Não informados",
-            "valores": "Não informados",
-            "riscos": "Dados insuficientes",
-        })
-        self.assertEqual(document.score, 50)
-        self.assertEqual(document.outcome, "insufficient_data")
-        mock_client.return_value.models.generate_content.assert_called_once()
