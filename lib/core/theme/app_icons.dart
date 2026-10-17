@@ -23,5 +23,19 @@ abstract final class AppIcons {
   static IconData get chevronRight => _ios ? CupertinoIcons.chevron_right : Icons.chevron_right;
   static IconData get chevronDown => _ios ? CupertinoIcons.chevron_down : Icons.expand_more;
   static IconData get location => _ios ? CupertinoIcons.location : Icons.location_on_outlined;
+  static IconData get summary => _ios ? CupertinoIcons.text_alignleft : Icons.notes;
+  static IconData get warning =>
+      _ios ? CupertinoIcons.exclamationmark_triangle : Icons.warning_amber_rounded;
+  static IconData get money => _ios ? CupertinoIcons.money_dollar_circle : Icons.payments_outlined;
+  static IconData get checklist => _ios ? CupertinoIcons.checkmark_seal : Icons.fact_check_outlined;
+  static IconData get obligations => _ios ? CupertinoIcons.list_bullet : Icons.assignment_outlined;
+  static IconData get question => _ios ? CupertinoIcons.lightbulb : Icons.lightbulb_outline;
+  static IconData get checkCircle =>
+      _ios ? CupertinoIcons.checkmark_circle_fill : Icons.check_circle;
+  static IconData get cancelCircle => _ios ? CupertinoIcons.xmark_circle_fill : Icons.cancel;
+  static IconData get helpCircle =>
+      _ios ? CupertinoIcons.question_circle_fill : Icons.help;
+  static IconData get clock => _ios ? CupertinoIcons.clock : Icons.schedule;
+  static IconData get handshake => _ios ? CupertinoIcons.person_2 : Icons.handshake_outlined;
   static IconData get logout => _ios ? CupertinoIcons.square_arrow_right : Icons.logout;
 }

@@ -1,6 +1,6 @@
 import 'empresa.dart';
 
-/// Dados enviados no cadastro. A senha vai em texto e o backend gera o
+/// Dados do cadastro. A senha vai em texto e o backend gera o
 /// `password_hash`. `id`, `created_at` e `confirmed` são do backend.
 class NovaConta {
   final String email;
@@ -9,9 +9,12 @@ class NovaConta {
 
   const NovaConta({required this.email, required this.senha, required this.empresa});
 
-  Map<String, dynamic> toJson() => {
+  /// Corpo de POST /auth/register/. O RegisterSerializer só aceita estes
+  /// campos; o resto do perfil vai depois num PATCH /users/{id}/.
+  Map<String, dynamic> toRegisterJson() => {
         'email': email,
         'password': senha,
-        ...empresa.toJson(),
+        'cnpj': empresa.cnpj,
+        'legal_name': empresa.razaoSocial,
       };
 }

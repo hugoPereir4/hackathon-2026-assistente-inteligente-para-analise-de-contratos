@@ -6,6 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../models/analise_resumo.dart';
 import '../../../components/components.dart';
+import '../../../shared/match_style.dart';
 
 /// Linha da lista "Análises recentes": ícone do arquivo, nome, data,
 /// categoria e o badge com o resultado do Match.
@@ -111,14 +112,7 @@ class AnaliseRecenteTile extends AdaptiveWidget {
         return const AppBadge(label: 'Falhou', color: AppColors.danger);
       case StatusAnalise.concluida:
         final score = analise.matchScore ?? 0;
-        return AppBadge(label: '$score% Match', color: corDoScore(score));
+        return AppBadge(label: '$score% Match', color: MatchStyle.corDoScore(score));
     }
-  }
-
-  /// Verde = boa aderência, amarelo = atenção, vermelho = alto risco.
-  static Color corDoScore(int score) {
-    if (score >= 75) return AppColors.success;
-    if (score >= 50) return AppColors.warning;
-    return AppColors.danger;
   }
 }

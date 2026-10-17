@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../controllers/cadastro_controller.dart';
@@ -42,8 +43,10 @@ class _CadastroViewState extends State<CadastroView> {
       }
       return;
     }
+    // Se o PATCH do perfil falhou no backend, a conta existe mas não está
+    // confirmada: segue para a tela de confirmação.
     Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.dashboard,
+      usuario.primeiroAcesso ? AppRoutes.confirmarEmpresa : AppRoutes.dashboard,
       (_) => false,
       arguments: usuario,
     );
@@ -96,7 +99,9 @@ class _CadastroViewState extends State<CadastroView> {
         controller: _controller.cnpjController,
         label: 'CNPJ *',
         placeholder: '00.000.000/0000-00',
-        keyboardType: TextInputType.number,
+        // Texto (e não número) porque o CNPJ alfanumérico tem letras.
+        keyboardType: TextInputType.text,
+        textCapitalization: TextCapitalization.characters,
         inputFormatters: [CnpjInputFormatter()],
         errorText: _controller.cnpjError,
         suffix: _controller.buscandoCnpj

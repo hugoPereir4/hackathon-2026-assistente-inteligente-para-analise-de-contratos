@@ -42,7 +42,7 @@ class _ConfirmarEmpresaViewState extends State<ConfirmarEmpresaView> {
       Navigator.of(context).pushNamedAndRemoveUntil(
         AppRoutes.dashboard,
         (_) => false,
-        arguments: widget.usuario,
+        arguments: _controller.usuario,
       );
     } else if (_controller.errorMessage != null) {
       await AdaptiveDialog.showMessage(

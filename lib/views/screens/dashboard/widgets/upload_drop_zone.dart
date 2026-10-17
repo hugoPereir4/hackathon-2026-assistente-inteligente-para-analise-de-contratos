@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../../../../core/platform/app_platform.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_icons.dart';
+import '../../../../models/arquivo_selecionado.dart';
 import '../../../components/components.dart';
 
 /// Zona de upload com borda tracejada.
@@ -75,7 +76,10 @@ class UploadDropZone extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 6),
-        const AppText.caption('Suporta PDF, DOCX (Máx. 50 MB)', textAlign: TextAlign.center),
+        const AppText.caption(
+          'Suporta PDF (máx. ${ArquivoSelecionado.tamanhoMaximoMb} MB)',
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 24),
         AdaptiveButton.secondary(
           label: _aceitaArrastar ? 'Ou selecione do computador' : 'Selecionar arquivo',

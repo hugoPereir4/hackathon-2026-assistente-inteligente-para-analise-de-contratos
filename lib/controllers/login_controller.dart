@@ -34,10 +34,10 @@ class LoginController extends BaseController {
     return identificadorError == null && senhaError == null;
   }
 
-  /// E-mail vai como digitado (sem espaços); CNPJ vai só com os dígitos.
+  /// E-mail em minúsculas; CNPJ sem pontuação e em maiúsculas.
   String get _identificadorNormalizado {
     final texto = identificadorController.text.trim();
-    return Validators.pareceEmail(texto) ? texto.toLowerCase() : Cnpj.digits(texto);
+    return Validators.pareceEmail(texto) ? texto.toLowerCase() : Cnpj.normalize(texto);
   }
 
   /// Retorna o usuário autenticado ou `null` se houve erro de validação/login.

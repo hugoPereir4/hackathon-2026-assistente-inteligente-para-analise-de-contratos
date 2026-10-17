@@ -3,8 +3,10 @@ import 'dart:typed_data';
 /// Arquivo escolhido pelo usuário (pelo seletor ou arrastando), independente
 /// do pacote que o forneceu. Os bytes só são lidos na hora do envio.
 class ArquivoSelecionado {
-  static const int tamanhoMaximoBytes = 50 * 1024 * 1024; // 50 MB
-  static const List<String> extensoesPermitidas = ['pdf', 'docx'];
+  // Mesmas regras do DocumentSerializer (MAX_DOCUMENT_UPLOAD_SIZE e só .pdf).
+  static const int tamanhoMaximoMb = 10;
+  static const int tamanhoMaximoBytes = tamanhoMaximoMb * 1024 * 1024;
+  static const List<String> extensoesPermitidas = ['pdf'];
 
   final String nome;
   final int tamanhoBytes;

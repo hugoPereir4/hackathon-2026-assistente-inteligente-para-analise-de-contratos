@@ -1,25 +1,44 @@
-/// Usuário autenticado. `primeiroAcesso` decide se o fluxo passa
-/// pela consulta de CNPJ + confirmação dos dados da empresa.
+/// Conta autenticada. No backend a própria `Company` é o usuário
+/// (GET /api/v1/users/ devolve só a empresa logada).
 class Usuario {
+  final int id;
   final String email;
   final String cnpj;
-  final String token;
-  final bool primeiroAcesso;
+  final String? razaoSocial;
+
+  /// `confirmed` no banco: o usuário já revisou os dados vindos da API de CNPJ.
+  final bool confirmado;
 
   const Usuario({
+    required this.id,
     required this.email,
     required this.cnpj,
-    required this.token,
-    required this.primeiroAcesso,
+    required this.confirmado,
+    this.razaoSocial,
   });
 
-  /// `confirmed` vem do banco: conta ainda não confirmada = primeiro acesso.
+  /// Primeiro acesso = dados da empresa ainda não confirmados.
+  bool get primeiroAcesso => !confirmado;
+
+  String get nomeExibicao => razaoSocial ?? email;
+
   factory Usuario.fromJson(Map<String, dynamic> json) {
     return Usuario(
+      id: json['id'] as int,
       email: json['email'] as String,
       cnpj: json['cnpj'] as String,
-      token: json['token'] as String,
-      primeiroAcesso: !(json['confirmed'] as bool? ?? false),
+      razaoSocial: json['legal_name'] as String?,
+      confirmado: json['confirmed'] as bool? ?? false,
+    );
+  }
+
+  Usuario copyWith({bool? confirmado, String? razaoSocial}) {
+    return Usuario(
+      id: id,
+      email: email,
+      cnpj: cnpj,
+      confirmado: confirmado ?? this.confirmado,
+      razaoSocial: razaoSocial ?? this.razaoSocial,
     );
   }
 }

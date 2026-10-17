@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/network/api_exception.dart';
+
 /// Base dos controllers (o "C" do MVC).
 ///
 /// Guarda o estado comum de carregamento e erro e avisa a view
@@ -8,6 +10,10 @@ abstract class BaseController extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   bool _disposed = false;
+
+  /// Último erro da API, com os erros por campo (ex.: e-mail já cadastrado).
+  @protected
+  ApiException? lastApiError;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -31,12 +37,19 @@ abstract class BaseController extends ChangeNotifier {
   @protected
   Future<bool> runAsync(Future<void> Function() action) async {
     _errorMessage = null;
+    lastApiError = null;
     setLoading(true);
     try {
       await action();
       return true;
-    } catch (e) {
-      _errorMessage = e.toString();
+    } on ApiException catch (e) {
+      lastApiError = e;
+      _errorMessage = e.message;
+      return false;
+    } catch (e, stack) {
+      // Erro inesperado (ex.: JSON diferente do esperado): não mostra detalhe técnico.
+      debugPrint('Erro inesperado: $e\n$stack');
+      _errorMessage = 'Algo deu errado. Tente novamente.';
       return false;
     } finally {
       setLoading(false);

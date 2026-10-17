@@ -25,6 +25,7 @@ class _DashboardViewState extends State<DashboardView> {
   late final DashboardController _controller = DashboardController(
     AppDependencies.instance.documentoService,
     AppDependencies.instance.seletorArquivoService,
+    AppDependencies.instance.authService,
     widget.usuario,
   );
 
@@ -49,12 +50,7 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   void _abrirAnalise(AnaliseResumo analise) {
-    // TODO: navegar para o Painel de Resultados quando a tela existir.
-    AdaptiveDialog.showMessage(
-      context,
-      title: analise.nomeArquivo,
-      message: 'O painel de resultados será a próxima etapa.',
-    );
+    Navigator.of(context).pushNamed(AppRoutes.resultado, arguments: analise);
   }
 
   Future<void> _sair() async {
@@ -64,7 +60,9 @@ class _DashboardViewState extends State<DashboardView> {
       message: 'Deseja encerrar a sessão?',
       confirmLabel: 'Sair',
     );
-    if (confirmou && mounted) {
+    if (!confirmou) return;
+    await _controller.sair();
+    if (mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
     }
   }
@@ -126,6 +124,21 @@ class _DashboardViewState extends State<DashboardView> {
       return const Padding(
         padding: EdgeInsets.all(24),
         child: Center(child: AdaptiveLoading()),
+      );
+    }
+    if (_controller.erroAoCarregar != null && _controller.recentes.isEmpty) {
+      return AppCard(
+        child: Column(
+          children: [
+            AppText.caption(_controller.erroAoCarregar!, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            AdaptiveButton.secondary(
+              label: 'Tentar novamente',
+              expanded: false,
+              onPressed: _controller.carregarRecentes,
+            ),
+          ],
+        ),
       );
     }
     if (_controller.recentes.isEmpty) {

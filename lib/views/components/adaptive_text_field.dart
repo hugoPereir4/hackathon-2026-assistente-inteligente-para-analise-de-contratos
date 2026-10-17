@@ -17,6 +17,7 @@ class AdaptiveTextField extends AdaptiveWidget {
   final bool enabled;
   final TextInputType keyboardType;
   final TextInputAction textInputAction;
+  final TextCapitalization textCapitalization;
   final List<TextInputFormatter> inputFormatters;
   final IconData? prefixIcon;
   final Widget? suffix;
@@ -34,6 +35,7 @@ class AdaptiveTextField extends AdaptiveWidget {
     this.enabled = true,
     this.keyboardType = TextInputType.text,
     this.textInputAction = TextInputAction.next,
+    this.textCapitalization = TextCapitalization.none,
     this.inputFormatters = const [],
     this.prefixIcon,
     this.suffix,
@@ -50,6 +52,7 @@ class AdaptiveTextField extends AdaptiveWidget {
       enabled: enabled,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
+      textCapitalization: textCapitalization,
       inputFormatters: inputFormatters,
       maxLines: maxLines,
       onChanged: onChanged,
@@ -78,6 +81,7 @@ class AdaptiveTextField extends AdaptiveWidget {
           enabled: enabled,
           keyboardType: keyboardType,
           textInputAction: textInputAction,
+          textCapitalization: textCapitalization,
           inputFormatters: inputFormatters,
           maxLines: maxLines,
           onChanged: onChanged,

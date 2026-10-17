@@ -43,9 +43,9 @@ class CadastroController extends BaseController {
   }
 
   void _aoMudarCnpj() {
-    final digitos = Cnpj.digits(cnpjController.text);
-    if (digitos.length == 14 && Cnpj.isValid(digitos) && digitos != _ultimoCnpjConsultado) {
-      _consultarCnpj(digitos);
+    final cnpj = Cnpj.normalize(cnpjController.text);
+    if (Cnpj.isValid(cnpj) && cnpj != _ultimoCnpjConsultado) {
+      _consultarCnpj(cnpj);
     }
   }
 
@@ -72,7 +72,7 @@ class CadastroController extends BaseController {
   bool _validar() {
     cnpjError = Validators.cnpj(cnpjController.text);
     emailError = Validators.email(emailController.text);
-    senhaError = Validators.senha(senhaController.text);
+    senhaError = Validators.novaSenha(senhaController.text);
     confirmarSenhaError =
         Validators.confirmarSenha(confirmarSenhaController.text, senhaController.text);
     notify();
@@ -87,12 +87,27 @@ class CadastroController extends BaseController {
     final conta = NovaConta(
       email: emailController.text.trim().toLowerCase(),
       senha: senhaController.text,
-      empresa: empresaForm.paraEmpresa(Cnpj.digits(cnpjController.text)),
+      empresa: empresaForm.paraEmpresa(Cnpj.normalize(cnpjController.text)),
     );
     final ok = await runAsync(() async {
       usuario = await _authService.cadastrar(conta);
     });
+    if (!ok) _mostrarErrosDosCampos();
     return ok ? usuario : null;
+  }
+
+  /// Leva os erros por campo do backend (ex.: "Já existe uma conta com este
+  /// email.") para baixo do campo certo. Se algum foi mostrado assim, não
+  /// precisa do diálogo genérico.
+  void _mostrarErrosDosCampos() {
+    final erro = lastApiError;
+    if (erro == null || erro.fieldErrors.isEmpty) return;
+    cnpjError = erro.erroDoCampo('cnpj') ?? cnpjError;
+    emailError = erro.erroDoCampo('email') ?? emailError;
+    senhaError = erro.erroDoCampo('password') ?? senhaError;
+    final mostrouNoCampo = ['cnpj', 'email', 'password'].any(erro.fieldErrors.containsKey);
+    if (mostrouNoCampo) clearError();
+    notify();
   }
 
   @override

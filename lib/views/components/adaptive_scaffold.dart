@@ -50,7 +50,12 @@ class AdaptiveScaffold extends AdaptiveWidget {
               backgroundColor: AppColors.primary,
               border: null,
               middle: Text(title!),
-              automaticallyImplyLeading: showBackButton,
+              // O botão de voltar padrão usa a cor primária, que some na barra
+              // primária; por isso ele é montado aqui em branco.
+              automaticallyImplyLeading: false,
+              leading: showBackButton && Navigator.of(context).canPop()
+                  ? const CupertinoNavigationBarBackButton(color: CupertinoColors.white)
+                  : null,
               trailing: actions.isEmpty
                   ? null
                   : Row(mainAxisSize: MainAxisSize.min, children: actions),
