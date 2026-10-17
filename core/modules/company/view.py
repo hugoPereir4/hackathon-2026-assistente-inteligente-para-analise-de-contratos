@@ -1,9 +1,13 @@
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import generics, serializers
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from core.classes.permission import CustomPermissionClass
 from core.modules.company.serializer import CompanyDetailSerializer, CompanySerializer
-from core.modules.company.service import CompanyService
+from core.modules.company.service import CnpjService, CompanyService
+from core.modules.company.validators import normalize_cnpj
 
 
 class ViewCompanyMe(generics.RetrieveUpdateDestroyAPIView):
@@ -31,3 +35,19 @@ class ViewCompanyMe(generics.RetrieveUpdateDestroyAPIView):
 
     def _service(self) -> CompanyService:
         return CompanyService()
+
+
+class ViewCompanyCnpjLookup(APIView):
+    """Consulta o CNPJ na Minha Receita para o front preencher o cadastro.
+    Pública (o usuário ainda não tem conta) e não salva nada."""
+
+    permission_classes = [AllowAny]
+    http_method_names = ["get", "head", "options"]
+
+    def get(self, request, cnpj):
+        try:
+            cnpj = normalize_cnpj(cnpj)
+        except serializers.ValidationError as error:
+            raise ValidationError({"cnpj": error.detail})
+
+        return Response(CnpjService().lookup(cnpj))
