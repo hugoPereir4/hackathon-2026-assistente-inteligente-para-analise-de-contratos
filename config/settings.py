@@ -32,6 +32,8 @@ DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
 
+# Configurações de APIs externas
+GOOGLE_AI_API_KEY = os.getenv("GOOGLE_AI_API_KEY")
 
 # Application definition
 
