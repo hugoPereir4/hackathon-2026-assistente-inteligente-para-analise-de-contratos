@@ -9,6 +9,7 @@ router.register(r"documents", DocumentViewSet, basename="document")
 
 
 urlpatterns = [
+    path("", include(router.urls)),
     path("companies/me/", ViewCompanyMe.as_view(), name="company_me"),
     path("auth/register/", ViewRegister.as_view(), name="register"),
     path("auth/login/", ViewTokenObtainPair.as_view(), name="token_obtain_pair"),
