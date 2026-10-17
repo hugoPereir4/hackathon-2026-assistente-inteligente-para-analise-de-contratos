@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
@@ -10,7 +11,7 @@ from google.genai import errors, types
 import httpx
 from pydantic import ValidationError
 
-from core.models import CompanyFact, Document
+from core.models import Company, CompanyFact, Document
 from .analysis_schema import DocumentAnalysis
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,15 @@ Não infira certificações, receita ou experiência pelo CNAE, porte ou fundaç
 Um fato booleano confirmado false é uma negativa explícita; fato ausente é desconhecido.
 Para requisitos desconhecidos, gere perguntas concretas e agrupe os que dependem
 da mesma informação. requisito_ids referencia apenas requisitos desconhecidos.
-fato_chave usa a chave existente quando disponível, senão null.
+Cada pergunta deve ter destino company_fact, cadastro ou papel.
+Para company_fact, fato_chave deve identificar o fato mesmo quando ainda não existe:
+use snake_case ASCII (máximo 100 caracteres), reutilizando chaves existentes e
+sem usar nomes de campos cadastrais ou de autenticação. Informe fato_rotulo e
+tipo_valor (booleano, inteiro, decimal, texto, data ou objeto).
+Para cadastro use fato_chave igual ao campo cadastral e fato_rotulo/tipo_valor null.
+Para papel use destino papel, sobre_papel true e fato_chave/fato_rotulo/tipo_valor null.
+Não agrupe fatos distintos na mesma pergunta. Para fatos existentes, mantenha o
+tipo e o formato do valor cadastrado. Não armazene o papel da empresa como um fato.
 Use IDs únicos para requisitos, prazos e perguntas; prazo_id referencia um prazo.
 Datas explícitas usam YYYY-MM-DD; prazos relativos preservam o evento de referência.
 Montantes e percentuais são strings decimais sem separador de milhar (ex.: "1500.50").
@@ -87,6 +96,17 @@ def _unique_ids(items):
     return set(ids)
 
 
+def valid_fact_key(key):
+    reserved = {field.name for field in Company._meta.fields} | {
+        "papel", "papel_empresa", "role", "company", "company_id", "api_key", "token",
+    }
+    return (
+        isinstance(key, str) and len(key) <= 100
+        and re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*", key) is not None
+        and key not in reserved
+    )
+
+
 def validate_analysis(analysis, text, context):
     """Valida evidências, referências e confirmação, sem gravar fatos."""
     normalized = _normalize(text)
@@ -130,18 +150,32 @@ def validate_analysis(analysis, text, context):
     covered = set()
     question_groups = set()
     role_question = False
-    fact_keys = {item["chave"] for item in context.values()}
     for question in analysis.perguntas_pendentes:
         refs = question.requisito_ids
         if len(refs) != len(set(refs)) or not set(refs) <= requirement_ids:
             raise AIAnalysisError("Pergunta referencia requisitos inválidos.")
         if not set(refs) <= unknown_ids or (not refs and not question.sobre_papel):
             raise AIAnalysisError("Pergunta sem lacuna de comparação correspondente.")
-        if question.fato_chave is not None and question.fato_chave not in fact_keys:
-            raise AIAnalysisError("Pergunta referencia uma chave de perfil inexistente.")
+        if question.destino == "company_fact":
+            if (
+                not valid_fact_key(question.fato_chave) or not question.fato_rotulo
+                or question.tipo_valor is None or question.sobre_papel
+            ):
+                raise AIAnalysisError("Pergunta sem destino de fato válido.")
+        elif question.destino == "cadastro":
+            if (
+                f"cadastro.{question.fato_chave}" not in context or question.sobre_papel
+                or question.fato_rotulo is not None or question.tipo_valor is not None
+            ):
+                raise AIAnalysisError("Pergunta cadastral inválida.")
+        elif (
+            not question.sobre_papel or question.fato_chave is not None
+            or question.fato_rotulo is not None or question.tipo_valor is not None
+        ):
+            raise AIAnalysisError("Pergunta sobre papel inválida.")
         if question.sobre_papel and role.papel != "desconhecido":
             raise AIAnalysisError("Pergunta sobre um papel já resolvido.")
-        group = "papel" if question.sobre_papel else question.fato_chave
+        group = (question.destino, question.fato_chave)
         if group is not None:
             if group in question_groups:
                 raise AIAnalysisError("Perguntas sobre a mesma informação devem ser agrupadas.")
@@ -197,6 +231,51 @@ def _provider_error_message(exc):
     return "Não foi possível concluir a análise por IA. Verifique a causa encadeada no traceback do serviço."
 
 
+def generate_structured(*, instruction, data, schema):
+    """Uma chamada ao provedor, com JSON Schema e validação local estrita."""
+    if not settings.GOOGLE_AI_API_KEY:
+        raise AnalysisInputError("A chave da API (GOOGLE_AI_API_KEY) não está configurada.")
+    model = (getattr(settings, "GOOGLE_AI_MODEL", "") or "").strip() or MODEL_NAME
+    try:
+        with genai.Client(
+            api_key=settings.GOOGLE_AI_API_KEY,
+            http_options=types.HttpOptions(timeout=60_000),
+        ) as client:
+            response = client.models.generate_content(
+                model=model, contents=json.dumps(data, ensure_ascii=False),
+                config=types.GenerateContentConfig(
+                    system_instruction=instruction, response_mime_type="application/json",
+                    response_json_schema=schema.model_json_schema(), temperature=0.2,
+                ),
+            )
+        if not response.text:
+            raise AIAnalysisError("A IA não retornou conteúdo.")
+        try:
+            return schema.model_validate_json(response.text), model
+        except ValidationError as exc:
+            raise AIAnalysisError("A IA retornou uma resposta fora do formato esperado.") from exc
+    except AIAnalysisError:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Falha na chamada à IA: %s (HTTP %s)",
+            type(exc).__name__, exc.code if isinstance(exc, errors.APIError) else "n/a",
+        )
+        raise AIAnalysisError(_provider_error_message(exc)) from exc
+
+
+def reanalyze_document_with_ai(document: Document) -> None:
+    document.refresh_from_db()
+    if not document.analysis_json:
+        raise AnalysisInputError("O documento ainda não possui análise. Use o endpoint analyze.")
+    claimed = Document.objects.filter(
+        pk=document.pk, status__in=[Document.Status.READY, Document.Status.FAILED],
+    ).update(status=Document.Status.PROCESSING)
+    if not claimed:
+        raise AnalysisStateError("O documento não está disponível para reavaliação.")
+    _analyze_claimed_document(document)
+
+
 def analyze_document_with_ai(document: Document, *, retry_failed: bool = False) -> None:
     """Analisa um upload; retry_failed permite repetir explicitamente uma falha.
 
@@ -218,6 +297,11 @@ def analyze_document_with_ai(document: Document, *, retry_failed: bool = False) 
             )
         raise AnalysisStateError("O documento já foi analisado, está em processamento ou não existe.")
     document.status = Document.Status.PROCESSING
+    _analyze_claimed_document(document)
+
+
+def _analyze_claimed_document(document: Document) -> None:
+    """Executa uma análise após a aquisição atômica, fora de transações de fatos."""
     try:
         if not settings.GOOGLE_AI_API_KEY:
             raise AnalysisInputError("A chave da API (GOOGLE_AI_API_KEY) não está configurada.")
@@ -225,37 +309,17 @@ def analyze_document_with_ai(document: Document, *, retry_failed: bool = False) 
         if not document.text_content or not document.text_content.strip():
             raise AnalysisInputError("O documento não possui texto extraído para análise.")
         context = build_company_context(document.company)
-        model = (getattr(settings, "GOOGLE_AI_MODEL", "") or "").strip() or MODEL_NAME
-        with genai.Client(
-            api_key=settings.GOOGLE_AI_API_KEY,
-            http_options=types.HttpOptions(timeout=60_000),
-        ) as client:
-            response = client.models.generate_content(
-                model=model,
-                contents=json.dumps({
-                    "documento": {"tipo": document.doc_type, "texto": document.text_content},
-                    "contexto_empresa": context,
-                }, ensure_ascii=False),
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    response_mime_type="application/json",
-                    # O schema Pydantic contém additionalProperties (extra=forbid).
-                    # Enviar como JSON Schema evita a conversão para o Schema
-                    # OpenAPI do Gemini, que rejeita additional_properties.
-                    response_json_schema=DocumentAnalysis.model_json_schema(),
-                    temperature=0.2,
-                ),
-            )
-        if not response.text:
-            raise AIAnalysisError("A IA não retornou conteúdo.")
-        try:
-            analysis = DocumentAnalysis.model_validate_json(response.text)
-        except ValidationError as exc:
-            raise AIAnalysisError("A IA retornou uma resposta fora do formato esperado.") from exc
+        analysis, model = generate_structured(
+            instruction=SYSTEM_INSTRUCTION,
+            data={
+                "documento": {"tipo": document.doc_type, "texto": document.text_content},
+                "contexto_empresa": context,
+            }, schema=DocumentAnalysis,
+        )
         validate_analysis(analysis, document.text_content, context)
         adherence, outcome = calculate_adherence(analysis)
         payload = {
-            **analysis.model_dump(mode="json"), "schema_version": 1,
+            **analysis.model_dump(mode="json"), "schema_version": 2,
             "aderencia": adherence, "outcome": outcome.value,
             "metadados": {
                 "analisado_em": timezone.now().isoformat(), "modelo": model,

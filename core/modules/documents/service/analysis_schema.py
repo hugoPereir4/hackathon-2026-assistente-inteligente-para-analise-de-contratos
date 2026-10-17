@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Text = Annotated[str, Field(min_length=1, pattern=r"\S")]
 DecimalText = Annotated[str, Field(pattern=r"^-?\d+(\.\d+)?$")]
+ValueType = Literal["booleano", "inteiro", "decimal", "texto", "data", "objeto"]
+ScalarType = Literal["booleano", "inteiro", "decimal", "texto", "data"]
 
 
 class Schema(BaseModel):
@@ -74,6 +76,9 @@ class Question(Schema):
     requisito_ids: list[Text]
     fato_chave: Text | None
     sobre_papel: bool
+    destino: Literal["company_fact", "cadastro", "papel"]
+    fato_rotulo: Annotated[str, Field(min_length=1, max_length=255, pattern=r"\S")] | None
+    tipo_valor: ValueType | None
 
 
 class DocumentAnalysis(Schema):
@@ -85,3 +90,17 @@ class DocumentAnalysis(Schema):
     riscos: list[Risk]
     requisitos: list[Requirement]
     perguntas_pendentes: list[Question]
+
+
+class InterpretedAnswer(Schema):
+    pergunta_id: Text
+    suficiente: bool
+    justificativa: Text
+    esclarecimento: Text | None
+    tipo_valor: ValueType | None
+    valor: bool | int | str | dict[str, bool | int | str] | None
+    tipos_campos: dict[str, ScalarType] | None
+
+
+class AnswerInterpretation(Schema):
+    respostas: list[InterpretedAnswer]

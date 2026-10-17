@@ -55,6 +55,13 @@ class DocumentSerializer(serializers.ModelSerializer):
 
 
 class DocumentDetailSerializer(DocumentSerializer):
+    analysis_desatualizada = serializers.SerializerMethodField()
+
+    def get_analysis_desatualizada(self, instance):
+        from core.modules.documents.service.answer_service import analysis_is_stale
+
+        return analysis_is_stale(instance)
+
     class Meta(DocumentSerializer.Meta):
-        fields = DocumentSerializer.Meta.fields + ("analysis_json",)
-        read_only_fields = DocumentSerializer.Meta.read_only_fields + ("analysis_json",)
+        fields = DocumentSerializer.Meta.fields + ("analysis_json", "analysis_desatualizada")
+        read_only_fields = DocumentSerializer.Meta.read_only_fields + ("analysis_json", "analysis_desatualizada")
