@@ -10,11 +10,10 @@ class NovaConta {
   const NovaConta({required this.email, required this.senha, required this.empresa});
 
   /// Corpo de POST /auth/register/. O RegisterSerializer só aceita estes
-  /// campos; o resto do perfil vai depois num PATCH /users/{id}/.
+  /// campos; o perfil da empresa vai depois num PATCH /companies/me/.
   Map<String, dynamic> toRegisterJson() => {
         'email': email,
         'password': senha,
         'cnpj': empresa.cnpj,
-        'legal_name': empresa.razaoSocial,
       };
 }

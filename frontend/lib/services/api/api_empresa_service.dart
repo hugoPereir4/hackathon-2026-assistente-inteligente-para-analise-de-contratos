@@ -1,15 +1,15 @@
 import '../../core/network/api_client.dart';
-import '../../core/network/api_exception.dart';
 import '../../models/empresa.dart';
-import '../../models/paginated.dart';
 import '../../models/usuario.dart';
 import '../empresa_service.dart';
 
-/// Perfil da empresa pela API Django (a Company é o próprio usuário).
+/// Perfil da empresa pela API Django (a Company é o próprio usuário):
+/// GET/PATCH /companies/me/.
 class ApiEmpresaService implements EmpresaService {
-  /// TODO(backend): este endpoint ainda não existe. Precisa ser público,
-  /// porque o cadastro consulta o CNPJ antes de existir login.
-  static const String rotaConsultaCnpj = 'cnpj/';
+  /// GET /companies/{cnpj}/ — o backend consulta uma API externa de CNPJ.
+  /// É pública, porque o cadastro consulta o CNPJ antes de existir login.
+  /// O endereço base vem de `API_URL` (veja AppConfig).
+  static const String rotaConsultaCnpj = 'companies/';
 
   final ApiClient _api;
 
@@ -17,12 +17,8 @@ class ApiEmpresaService implements EmpresaService {
 
   @override
   Future<Empresa> buscarPerfil() async {
-    final json = await _api.get('users/') as Map<String, dynamic>;
-    final pagina = Paginated.fromJson(json, Empresa.fromJson);
-    if (pagina.results.isEmpty) {
-      throw const ApiException('Não foi possível carregar o perfil da empresa.');
-    }
-    return pagina.results.first;
+    final json = await _api.get('companies/me/');
+    return Empresa.fromJson(json as Map<String, dynamic>);
   }
 
   @override
@@ -34,7 +30,7 @@ class ApiEmpresaService implements EmpresaService {
   @override
   Future<Usuario> salvarPerfil(Usuario usuario, Empresa empresa) async {
     final json = await _api.patch(
-      'users/${usuario.id}/',
+      'companies/me/',
       body: {...empresa.toPerfilJson(), 'confirmed': true},
     );
     return Usuario.fromJson(json as Map<String, dynamic>);

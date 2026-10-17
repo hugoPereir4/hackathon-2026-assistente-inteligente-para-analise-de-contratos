@@ -10,10 +10,28 @@ enum PorteEmpresa {
 
   const PorteEmpresa(this.codigo, this.descricao);
 
+  /// Aceita o código salvo no backend ("ME") e também os textos que a API
+  /// externa de CNPJ devolve ("MICRO EMPRESA", "EMPRESA DE PEQUENO PORTE"...).
   static PorteEmpresa? fromCodigo(String? codigo) {
+    if (codigo == null) return null;
+    final texto = codigo.trim().toUpperCase();
     for (final p in values) {
-      if (p.codigo == codigo) return p;
+      if (p.codigo == texto) return p;
     }
-    return null;
+    return _porDescricaoExterna[texto.replaceAll(RegExp(r'[^A-Z0-9]'), '')];
   }
+
+  /// Chaves sem espaços nem pontuação.
+  static const _porDescricaoExterna = {
+    'MICROEMPREENDEDORINDIVIDUAL': mei,
+    'MICROEMPRESA': me,
+    '01': me,
+    '1': me,
+    'EMPRESADEPEQUENOPORTE': epp,
+    '03': epp,
+    '3': epp,
+    'DEMAIS': demais,
+    '05': demais,
+    '5': demais,
+  };
 }

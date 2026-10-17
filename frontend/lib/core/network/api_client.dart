@@ -60,8 +60,9 @@ class ApiClient {
     return _enviar(() => http.Request('GET', _uri(path, query)), auth: auth);
   }
 
-  Future<dynamic> post(String path, {Object? body, bool auth = true}) {
-    return _enviar(() => _comJson('POST', path, body), auth: auth);
+  /// [timeout] permite esperar mais em chamadas lentas (ex.: análise da IA).
+  Future<dynamic> post(String path, {Object? body, bool auth = true, Duration? timeout}) {
+    return _enviar(() => _comJson('POST', path, body), auth: auth, timeout: timeout);
   }
 
   Future<dynamic> patch(String path, {Object? body, bool auth = true}) {
@@ -105,11 +106,15 @@ class ApiClient {
 
   /// [criarRequest] é chamado de novo na repetição após o refresh,
   /// porque um `BaseRequest` do pacote http só pode ser enviado uma vez.
-  Future<dynamic> _enviar(http.BaseRequest Function() criarRequest, {bool auth = true}) async {
-    var resposta = await _executar(criarRequest(), auth: auth);
+  Future<dynamic> _enviar(
+    http.BaseRequest Function() criarRequest, {
+    bool auth = true,
+    Duration? timeout,
+  }) async {
+    var resposta = await _executar(criarRequest(), auth: auth, timeout: timeout);
 
     if (resposta.statusCode == 401 && auth && await _renovarAccess()) {
-      resposta = await _executar(criarRequest(), auth: auth);
+      resposta = await _executar(criarRequest(), auth: auth, timeout: timeout);
     }
 
     final corpo = utf8.decode(resposta.bodyBytes);
@@ -120,7 +125,11 @@ class ApiClient {
     throw ApiException.fromResponse(resposta.statusCode, corpo);
   }
 
-  Future<http.Response> _executar(http.BaseRequest request, {required bool auth}) async {
+  Future<http.Response> _executar(
+    http.BaseRequest request, {
+    required bool auth,
+    Duration? timeout,
+  }) async {
     request.headers['Accept'] = 'application/json';
     request.headers['Accept-Language'] = 'pt-BR';
     if (auth) {
@@ -128,7 +137,7 @@ class ApiClient {
       if (access != null) request.headers['Authorization'] = 'Bearer $access';
     }
     try {
-      final streamed = await _http.send(request).timeout(AppConfig.requestTimeout);
+      final streamed = await _http.send(request).timeout(timeout ?? AppConfig.requestTimeout);
       return await http.Response.fromStream(streamed);
     } on TimeoutException {
       throw const ApiException('O servidor demorou para responder. Tente novamente.');

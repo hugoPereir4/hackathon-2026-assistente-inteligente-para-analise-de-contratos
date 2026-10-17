@@ -1,14 +1,23 @@
-/// Estado do documento no app. Agrupa os status do backend
-/// (`uploaded`, `processing`, `ready`, `failed`).
+/// Estado do documento, a partir do `status` do backend.
 enum StatusAnalise {
+  /// `uploaded`: enviado, mas a análise ainda não foi pedida
+  /// (POST /documents/{id}/analyze/).
+  aguardando,
+
+  /// `processing`: a IA está analisando.
   processando,
+
+  /// `ready`
   concluida,
+
+  /// `failed`
   erro;
 
   static StatusAnalise fromApi(String? status) => switch (status) {
         'ready' => concluida,
         'failed' => erro,
-        _ => processando, // uploaded, processing
+        'processing' => processando,
+        _ => aguardando,
       };
 }
 
@@ -73,6 +82,8 @@ class AnaliseResumo {
   });
 
   bool get concluida => status == StatusAnalise.concluida;
+  bool get aguardando => status == StatusAnalise.aguardando;
+  bool get processando => status == StatusAnalise.processando;
 
   String? get categoria => tipo?.descricao;
 

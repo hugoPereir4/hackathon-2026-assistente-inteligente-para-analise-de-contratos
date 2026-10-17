@@ -18,7 +18,8 @@ class AnaliseRecenteTile extends AdaptiveWidget {
 
   const AnaliseRecenteTile({super.key, required this.analise, this.onTap});
 
-  VoidCallback? get _onTap => analise.concluida ? onTap : null;
+  /// Enquanto a IA está processando não há o que abrir.
+  VoidCallback? get _onTap => analise.processando ? null : onTap;
 
   @override
   Widget buildMaterial(BuildContext context) {
@@ -102,6 +103,8 @@ class AnaliseRecenteTile extends AdaptiveWidget {
 
   Widget _badge() {
     switch (analise.status) {
+      case StatusAnalise.aguardando:
+        return const AppBadge(label: 'Aguardando análise', color: AppColors.textSecondary);
       case StatusAnalise.processando:
         return const AppBadge(
           label: 'Analisando',

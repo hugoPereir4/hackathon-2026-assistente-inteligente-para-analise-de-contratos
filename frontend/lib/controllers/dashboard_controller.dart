@@ -69,53 +69,81 @@ class DashboardController extends BaseController {
     notify();
   }
 
-  /// Abre o seletor de arquivos. Retorna `true` se o envio começou.
-  Future<bool> selecionarArquivo() async {
-    if (enviando) return false;
+  /// Abre o seletor de arquivos e envia. Retorna o documento criado, ou
+  /// `null` se o usuário cancelou ou houve erro (veja [errorMessage]).
+  Future<AnaliseResumo?> selecionarArquivo() async {
+    if (enviando) return null;
     final ArquivoSelecionado? arquivo;
     try {
       arquivo = await _seletorArquivo.selecionarDocumento();
     } catch (_) {
       setError('Não foi possível abrir o seletor de arquivos.');
-      return false;
+      return null;
     }
-    if (arquivo == null) return false; // usuário cancelou
+    if (arquivo == null) return null; // usuário cancelou
     return _enviar(arquivo);
   }
 
   /// Recebe arquivos soltos na zona de upload (web/desktop). Usa só o primeiro.
-  Future<bool> receberArquivosArrastados(List<XFile> arquivos) async {
+  Future<AnaliseResumo?> receberArquivosArrastados(List<XFile> arquivos) async {
     definirArrastando(false);
-    if (enviando || arquivos.isEmpty) return false;
+    if (enviando || arquivos.isEmpty) return null;
     final ArquivoSelecionado arquivo;
     try {
       arquivo = await _seletorArquivo.deXFile(arquivos.first);
     } catch (_) {
       setError('Não foi possível ler o arquivo arrastado.');
-      return false;
+      return null;
     }
     return _enviar(arquivo);
   }
 
-  Future<bool> _enviar(ArquivoSelecionado arquivo) async {
+  Future<AnaliseResumo?> _enviar(ArquivoSelecionado arquivo) async {
     if (!arquivo.extensaoValida) {
       setError('Formato não suportado. Envie um arquivo PDF.');
-      return false;
+      return null;
     }
     if (!arquivo.tamanhoValido) {
       setError('O arquivo precisa ter no máximo ${ArquivoSelecionado.tamanhoMaximoMb} MB.');
-      return false;
+      return null;
     }
 
     arquivoEmEnvio = arquivo.nome;
-    final ok = await runAsync(() async {
-      final analise = await _documentoService.enviar(arquivo);
-      _recentes = [analise, ..._recentes];
+    AnaliseResumo? enviada;
+    await runAsync(() async {
+      enviada = await _documentoService.enviar(arquivo);
+      _recentes = [enviada!, ..._recentes];
     });
     arquivoEmEnvio = null;
     notify();
-    if (ok) _iniciarPollingSeNecessario();
-    return ok;
+    return enviada;
+  }
+
+  /// Pede a análise da IA e espera o resultado (até ~1 min).
+  /// Retorna a mensagem de erro, ou `null` se deu certo.
+  Future<String?> analisar(AnaliseResumo analise) async {
+    _substituir(analise.copyWith(status: StatusAnalise.processando));
+    try {
+      _substituir(await _documentoService.analisar(analise.id));
+      return null;
+    } on ApiException catch (e) {
+      if (e.statusCode == 409 || e.statusCode == null) {
+        // 409: já está sendo analisado. Sem status: timeout/conexão; o
+        // backend pode continuar processando. Nos dois casos, acompanha.
+        _iniciarPollingSeNecessario();
+        return e.statusCode == null ? e.message : null;
+      }
+      _substituir(analise.copyWith(status: StatusAnalise.erro));
+      return e.message;
+    } catch (_) {
+      _substituir(analise.copyWith(status: StatusAnalise.erro));
+      return 'Não foi possível concluir a análise.';
+    }
+  }
+
+  void _substituir(AnaliseResumo atualizada) {
+    _recentes = [for (final a in _recentes) a.id == atualizada.id ? atualizada : a];
+    notify();
   }
 
   /// Enquanto houver análise "processando", consulta o backend periodicamente.
@@ -142,8 +170,7 @@ class DashboardController extends BaseController {
     _atualizando = true;
     for (final analise in pendentes) {
       try {
-        final atualizada = await _documentoService.buscar(analise.id);
-        _recentes = [for (final a in _recentes) a.id == atualizada.id ? atualizada : a];
+        _substituir(await _documentoService.buscar(analise.id));
       } catch (_) {
         // Tenta de novo no próximo ciclo.
       }

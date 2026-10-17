@@ -41,16 +41,47 @@ class _DashboardViewState extends State<DashboardView> {
     super.dispose();
   }
 
-  Future<void> _tratarResultadoDoEnvio(Future<bool> envio) async {
-    final ok = await envio;
-    final erro = _controller.errorMessage;
-    if (ok || erro == null || !mounted) return;
-    _controller.clearError();
-    await AdaptiveDialog.showMessage(context, title: 'Não foi possível enviar', message: erro);
+  /// Upload e, em seguida, a análise da IA (o backend não analisa sozinho).
+  Future<void> _tratarResultadoDoEnvio(Future<AnaliseResumo?> envio) async {
+    final enviada = await envio;
+    if (!mounted) return;
+    if (enviada == null) {
+      final erro = _controller.errorMessage;
+      if (erro == null) return; // usuário cancelou
+      _controller.clearError();
+      await AdaptiveDialog.showMessage(context, title: 'Não foi possível enviar', message: erro);
+      return;
+    }
+    await _analisar(enviada);
   }
 
-  void _abrirAnalise(AnaliseResumo analise) {
-    Navigator.of(context).pushNamed(AppRoutes.resultado, arguments: analise);
+  Future<void> _analisar(AnaliseResumo analise) async {
+    final erro = await _controller.analisar(analise);
+    if (erro == null || !mounted) return;
+    await AdaptiveDialog.showMessage(context, title: 'A análise não foi concluída', message: erro);
+  }
+
+  Future<void> _abrirAnalise(AnaliseResumo analise) async {
+    switch (analise.status) {
+      case StatusAnalise.concluida:
+        await Navigator.of(context).pushNamed(AppRoutes.resultado, arguments: analise);
+      case StatusAnalise.aguardando:
+        final confirmou = await AdaptiveDialog.showConfirm(
+          context,
+          title: 'Analisar documento',
+          message: 'Este documento ainda não foi analisado. Deseja analisar agora?',
+          confirmLabel: 'Analisar',
+        );
+        if (confirmou && mounted) await _analisar(analise);
+      case StatusAnalise.erro:
+        await AdaptiveDialog.showMessage(
+          context,
+          title: 'Análise com erro',
+          message: 'A análise deste documento falhou. Envie o arquivo novamente para tentar de novo.',
+        );
+      case StatusAnalise.processando:
+        break;
+    }
   }
 
   Future<void> _sair() async {

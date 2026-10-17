@@ -17,9 +17,6 @@ class MockDatabase {
   /// API ainda não expõe, para a tela já ter o que mostrar).
   final Map<int, List<Map<String, dynamic>>> documentosPorEmpresa = {};
 
-  /// Quando cada documento "termina" de ser analisado.
-  final Map<int, DateTime> prontoEm = {};
-
   int? logadoId;
   int _proximoId = 1;
 

@@ -5,6 +5,7 @@ import 'dart:convert';
 /// Entende os formatos do Django REST Framework:
 ///   {"detail": "..."}                       -> erro geral
 ///   {"email": ["Já existe uma conta..."]}   -> erros por campo
+///   {"error": "..."}                        -> erros da análise com IA
 ///   {"message": "...", "error": {...}}      -> formato do CustomPermissionClass
 class ApiException implements Exception {
   final int? statusCode;
@@ -36,12 +37,14 @@ class ApiException implements Exception {
 
     final campos = <String, List<String>>{};
     json.forEach((chave, valor) {
-      if (chave == 'detail' || chave == 'message') return;
+      if (chave == 'detail' || chave == 'message' || chave == 'error') return;
       final msgs = _comoLista(valor);
       if (msgs.isNotEmpty) campos[chave] = msgs;
     });
 
-    final geral = _comoTexto(json['detail']) ?? _comoTexto(json['message']);
+    final geral = _comoTexto(json['detail']) ??
+        _comoTexto(json['error']) ??
+        _comoTexto(json['message']);
     final primeiroDeCampo = campos.values.isEmpty ? null : campos.values.first.first;
     return ApiException(
       geral ?? primeiroDeCampo ?? padrao,

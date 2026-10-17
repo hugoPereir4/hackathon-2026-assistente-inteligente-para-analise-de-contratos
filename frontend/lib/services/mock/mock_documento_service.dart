@@ -8,8 +8,8 @@ import '../documento_service.dart';
 import 'mock_analises.dart';
 import 'mock_database.dart';
 
-/// Documentos fake. Simula o processamento: o status vai de "uploaded"
-/// para "ready" alguns segundos depois do envio.
+/// Documentos fake, com o mesmo fluxo da API: o upload deixa o documento
+/// "uploaded" e [analisar] passa por "processing" até "ready".
 class MockDocumentoService implements DocumentoService {
   static const Duration _tempoDeAnalise = Duration(seconds: 4);
 
@@ -26,6 +26,11 @@ class MockDocumentoService implements DocumentoService {
     return lista;
   }
 
+  Map<String, dynamic> _documento(String id) => _documentos.firstWhere(
+        (d) => d['id'].toString() == id,
+        orElse: () => throw const ApiException('Recurso não encontrado.', statusCode: 404),
+      );
+
   @override
   Future<List<AnaliseResumo>> listarRecentes() async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
@@ -39,50 +44,53 @@ class MockDocumentoService implements DocumentoService {
     await arquivo.lerBytes(); // simula a leitura/upload do conteúdo
     await Future<void>.delayed(const Duration(milliseconds: 1200));
 
-    final id = _db.novoId();
     final documento = <String, dynamic>{
-      'id': id,
+      'id': _db.novoId(),
       'doc_type': tipo?.codigo,
       'filename': arquivo.nome,
       'status': 'uploaded',
       'created_at': DateTime.now().toUtc().toIso8601String(),
+      'score': null,
+      'outcome': null,
     };
     _documentos.add(documento);
-    _db.prontoEm[id] = DateTime.now().add(_tempoDeAnalise);
+    return AnaliseResumo.fromJson(documento);
+  }
+
+  @override
+  Future<AnaliseResumo> analisar(String id) async {
+    final documento = _documento(id);
+    if (documento['status'] != 'uploaded') {
+      throw const ApiException(
+        'O documento já foi analisado, está em processamento ou não existe.',
+        statusCode: 409,
+      );
+    }
+    documento['status'] = 'processing';
+    await Future<void>.delayed(_tempoDeAnalise);
+
+    final score = 40 + _random.nextInt(60);
+    final docType = documento['doc_type'] as String? ??
+        ((documento['filename'] as String).toLowerCase().contains('edital') ? 'tender' : 'contract');
+    final analise = MockAnalises.gerar(docType: docType, score: score);
+    documento
+      ..['status'] = 'ready'
+      ..['doc_type'] = docType
+      ..['score'] = score
+      ..['outcome'] = analise['outcome']
+      ..['analysis_json'] = analise;
     return AnaliseResumo.fromJson(documento);
   }
 
   @override
   Future<AnaliseResumo> buscar(String id) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    return AnaliseResumo.fromJson(_atualizado(id));
+    return AnaliseResumo.fromJson(_documento(id));
   }
 
   @override
   Future<AnaliseDetalhe> buscarDetalhe(String id) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    return AnaliseDetalhe.fromJson(_atualizado(id));
-  }
-
-  /// Busca o documento e, se o "tempo de análise" já passou, finaliza.
-  Map<String, dynamic> _atualizado(String id) {
-    final documento = _documentos.firstWhere(
-      (d) => d['id'].toString() == id,
-      orElse: () => throw const ApiException('Recurso não encontrado.', statusCode: 404),
-    );
-    final pronto = _db.prontoEm[documento['id']];
-    if (documento['status'] != 'ready' && pronto != null && DateTime.now().isAfter(pronto)) {
-      final score = 40 + _random.nextInt(60);
-      documento
-        ..['status'] = 'ready'
-        ..['score'] = score
-        ..['doc_type'] ??=
-            (documento['filename'] as String).toLowerCase().contains('edital') ? 'tender' : 'contract';
-      final analise = MockAnalises.gerar(docType: documento['doc_type'] as String, score: score);
-      documento
-        ..['analysis_json'] = analise
-        ..['outcome'] = analise['outcome'];
-    }
-    return documento;
+    return AnaliseDetalhe.fromJson(_documento(id));
   }
 }

@@ -20,13 +20,39 @@ void main() {
     expect(u.primeiroAcesso, isTrue);
   });
 
+  test('Empresa lê a consulta de CNPJ (GET /companies/{cnpj}/)', () {
+    final e = Empresa.fromJson({
+      'cnpj': '68756612000142',
+      'legal_name': '68.756.612 JOSE JUNIOR WAROL SOARES',
+      'cnae_primary': '4721-1/02',
+      'company_size': 'MICRO EMPRESA',
+      'founded_on': '2026-08-24',
+      'address_city': 'SUMIDOURO',
+      'address_state': 'RJ',
+    });
+    expect(e.razaoSocial, '68.756.612 JOSE JUNIOR WAROL SOARES');
+    expect(e.cnae, '4721-1/02');
+    expect(e.porte, PorteEmpresa.me);
+    expect(e.dataFundacao, DateTime(2026, 8, 24));
+    expect(e.cidade, 'SUMIDOURO');
+    expect(e.uf, 'RJ');
+  });
+
+  test('PorteEmpresa aceita código do banco e texto da API externa', () {
+    expect(PorteEmpresa.fromCodigo('EPP'), PorteEmpresa.epp);
+    expect(PorteEmpresa.fromCodigo('Empresa de Pequeno Porte'), PorteEmpresa.epp);
+    expect(PorteEmpresa.fromCodigo('DEMAIS'), PorteEmpresa.demais);
+    expect(PorteEmpresa.fromCodigo('qualquer coisa'), isNull);
+    expect(PorteEmpresa.fromCodigo(null), isNull);
+  });
+
   test('NovaConta envia ao register só os campos aceitos', () {
     const conta = NovaConta(
       email: 'ana@empresa.com',
       senha: 'senhaForte1',
       empresa: Empresa(cnpj: '11222333000181', razaoSocial: 'ACME', cidade: 'Rio'),
     );
-    expect(conta.toRegisterJson().keys, ['email', 'password', 'cnpj', 'legal_name']);
+    expect(conta.toRegisterJson().keys, ['email', 'password', 'cnpj']);
   });
 
   test('Empresa.toPerfilJson usa as colunas do banco e não manda o CNPJ', () {
@@ -70,7 +96,7 @@ void main() {
     expect(pagina.count, 2);
     final [edital, contrato] = pagina.results;
     expect(edital.id, '3');
-    expect(edital.status, StatusAnalise.processando);
+    expect(edital.status, StatusAnalise.aguardando);
     expect(edital.categoria, 'Edital');
     expect(contrato.concluida, isTrue);
     expect(contrato.matchScore, 92);
