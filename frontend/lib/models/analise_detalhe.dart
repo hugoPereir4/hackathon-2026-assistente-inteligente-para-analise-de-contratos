@@ -2,7 +2,8 @@ import 'analise_resumo.dart';
 
 /// Resultado completo de uma análise: GET /documents/{id}/.
 ///
-/// O `analysis_json` segue o formato devolvido pela IA (schema_version 1):
+/// O `analysis_json` segue o formato devolvido pela IA (schema_version 1 e 2;
+/// a v2 acrescenta `destino`, `fato_rotulo` e `tipo_valor` nas perguntas):
 ///
 /// ```text
 /// resumo                 texto
@@ -34,6 +35,10 @@ class AnaliseDetalhe {
   final List<PerguntaPendente> perguntas;
   final DateTime? analisadoEm;
   final String? modelo;
+  final int? schemaVersion;
+
+  /// `analysis_desatualizada`: o perfil da empresa mudou depois da análise.
+  final bool desatualizada;
 
   const AnaliseDetalhe({
     required this.resumo,
@@ -48,9 +53,18 @@ class AnaliseDetalhe {
     this.perguntas = const [],
     this.analisadoEm,
     this.modelo,
+    this.schemaVersion,
+    this.desatualizada = false,
   });
 
   int? get score => resumo.matchScore;
+
+  /// Só análises v2 aceitam respostas; as antigas precisam ser reanalisadas.
+  bool get versaoAntiga => schemaVersion != null && schemaVersion! < 2;
+
+  /// Perguntas que o usuário pode responder pelo app (fatos da empresa).
+  List<PerguntaPendente> get perguntasRespondiveis =>
+      versaoAntiga ? const [] : perguntas.where((p) => p.respondivel).toList();
   ResultadoMatch? get resultado => resumo.resultado;
 
   int get requisitosAtendidos =>
@@ -117,6 +131,8 @@ class AnaliseDetalhe {
           .toList(),
       analisadoEm: DateTime.tryParse(metadados['analisado_em']?.toString() ?? '')?.toLocal(),
       modelo: _texto(metadados['modelo']),
+      schemaVersion: _inteiro(analise['schema_version']),
+      desatualizada: json['analysis_desatualizada'] == true,
     );
   }
 }
@@ -370,18 +386,45 @@ class PerguntaPendente {
   final List<String> requisitoIds;
   final String? fatoChave;
 
+  /// v2: `company_fact` (fato da empresa), `cadastro` ou `papel`.
+  final String? destino;
+  final String? fatoRotulo;
+
+  /// v2: booleano, inteiro, decimal, texto, data ou objeto.
+  final String? tipoValor;
+  final bool sobrePapel;
+
   const PerguntaPendente({
     required this.pergunta,
     this.id,
     this.requisitoIds = const [],
     this.fatoChave,
+    this.destino,
+    this.fatoRotulo,
+    this.tipoValor,
+    this.sobrePapel = false,
   });
+
+  /// O backend só aceita respostas para perguntas sobre fatos da empresa.
+  bool get respondivel => id != null && destino == 'company_fact';
+
+  /// Dica para o campo de resposta, conforme o tipo esperado.
+  String get dicaResposta => switch (tipoValor) {
+        'booleano' => 'Ex.: Sim, temos.',
+        'data' => 'Ex.: 15/03/2020',
+        'inteiro' || 'decimal' => 'Informe o número',
+        _ => 'Sua resposta',
+      };
 
   factory PerguntaPendente.fromJson(Map<String, dynamic> json) => PerguntaPendente(
         id: _texto(json['id']),
         pergunta: _texto(json['pergunta']) ?? '',
         requisitoIds: (json['requisito_ids'] as List? ?? const []).map((e) => '$e').toList(),
         fatoChave: _texto(json['fato_chave']),
+        destino: _texto(json['destino']),
+        fatoRotulo: _texto(json['fato_rotulo']),
+        tipoValor: _texto(json['tipo_valor']),
+        sobrePapel: json['sobre_papel'] == true,
       );
 }
 

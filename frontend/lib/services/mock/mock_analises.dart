@@ -1,4 +1,4 @@
-/// Gera um `analysis_json` de exemplo no formato da IA (schema_version 1),
+/// Gera um `analysis_json` de exemplo no formato da IA (schema_version 2),
 /// baseado na resposta real enviada pelo time do backend.
 abstract final class MockAnalises {
   static Map<String, dynamic> gerar({required String docType, required int score}) {
@@ -55,7 +55,7 @@ abstract final class MockAnalises {
     final desconhecidos = requisitos.length - atendidos - naoAtendidos;
 
     return {
-      'schema_version': 1,
+      'schema_version': 2,
       'resumo': docType == 'tender'
           ? 'Edital de pregão eletrônico para contratação de empresa de desenvolvimento e '
               'sustentação de sistemas web, com vigência de 12 meses a partir da assinatura.'
@@ -173,8 +173,11 @@ abstract final class MockAnalises {
             'id': 'pergunta-1',
             'pergunta': 'A empresa possui certificação ISO 27001?',
             'requisito_ids': ['req-3'],
-            'fato_chave': null,
+            'fato_chave': 'iso_27001',
             'sobre_papel': false,
+            'destino': 'company_fact',
+            'fato_rotulo': 'Possui certificação ISO 27001',
+            'tipo_valor': 'booleano',
           },
       ],
       'aderencia': {

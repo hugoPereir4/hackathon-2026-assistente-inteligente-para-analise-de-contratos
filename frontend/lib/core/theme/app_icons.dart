@@ -33,6 +33,8 @@ abstract final class AppIcons {
   static IconData get checkCircle =>
       _ios ? CupertinoIcons.checkmark_circle_fill : Icons.check_circle;
   static IconData get cancelCircle => _ios ? CupertinoIcons.xmark_circle_fill : Icons.cancel;
+  static IconData get emptyCircle => _ios ? CupertinoIcons.circle : Icons.radio_button_unchecked;
+  static IconData get refresh => _ios ? CupertinoIcons.arrow_clockwise : Icons.refresh;
   static IconData get helpCircle =>
       _ios ? CupertinoIcons.question_circle_fill : Icons.help;
   static IconData get clock => _ios ? CupertinoIcons.clock : Icons.schedule;

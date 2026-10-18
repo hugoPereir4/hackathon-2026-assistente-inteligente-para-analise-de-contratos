@@ -96,13 +96,17 @@ class _ResultadoViewState extends State<ResultadoView> {
       ];
     }
 
-    if (!detalhe.resumo.concluida) {
-      return [
-        _Aviso(
-          mensagem: detalhe.resumo.status == StatusAnalise.erro
-              ? 'A análise deste documento falhou. Tente enviá-lo novamente.'
-              : 'A IA ainda está analisando este documento. Volte em instantes.',
-        ),
+    final falhou = detalhe.resumo.status == StatusAnalise.erro;
+
+    // Uma reanálise que falha preserva o resultado anterior: ele continua
+    // na tela, com o aviso e o botão para tentar de novo.
+    if (falhou && detalhe.vazio) {
+      return const [_Aviso(mensagem: 'A análise deste documento falhou. Tente enviá-lo novamente.')];
+    }
+
+    if (!falhou && !detalhe.resumo.concluida) {
+      return const [
+        _Aviso(mensagem: 'A IA ainda está analisando este documento. Volte em instantes.'),
       ];
     }
 
@@ -113,9 +117,71 @@ class _ResultadoViewState extends State<ResultadoView> {
     return _secoes(detalhe);
   }
 
+  /// Por que vale reanalisar este documento, se for o caso.
+  String? _motivoParaReanalisar(AnaliseDetalhe d) {
+    if (d.resumo.status == StatusAnalise.erro) {
+      return 'A última análise falhou. O resultado abaixo é o anterior.';
+    }
+    if (d.versaoAntiga) {
+      return 'Esta análise é de uma versão anterior. Reanalise para poder responder às perguntas da IA.';
+    }
+    if (d.desatualizada) {
+      return 'Os dados da empresa mudaram depois desta análise.';
+    }
+    return null;
+  }
+
+  Future<void> _mostrarErro(String titulo) async {
+    final erro = _controller.errorMessage;
+    if (erro == null || !mounted) return;
+    await AdaptiveDialog.showMessage(context, title: titulo, message: erro);
+    _controller.clearError();
+  }
+
+  Future<void> _enviarRespostas() async {
+    if (!await _controller.gerarPrevia()) await _mostrarErro('Não foi possível enviar');
+  }
+
+  Future<void> _confirmarRespostas() async {
+    final confirmacao = await _controller.confirmar();
+    if (!mounted) return;
+    if (confirmacao == null) return _mostrarErro('Não foi possível salvar');
+    await AdaptiveDialog.showMessage(
+      context,
+      title: confirmacao.reanaliseFalhou ? 'Respostas salvas' : 'Análise atualizada',
+      message: confirmacao.reanaliseFalhou
+          ? 'Suas respostas foram salvas no perfil, mas a reanálise falhou'
+              '${confirmacao.erroReanalise == null ? '' : ': ${confirmacao.erroReanalise}'}. '
+              'Tente reanalisar em instantes.'
+          : 'Suas respostas foram salvas no perfil e o documento foi reanalisado.',
+    );
+  }
+
+  Future<void> _reanalisar() async {
+    if (!await _controller.reanalisar()) await _mostrarErro('Não foi possível reanalisar');
+  }
+
   List<Widget> _secoes(AnaliseDetalhe d) {
+    final motivo = _motivoParaReanalisar(d);
     final secoes = <Widget>[
-      if (d.perguntas.isNotEmpty) PerguntasPendentesCard(perguntas: d.perguntas),
+      if (motivo != null)
+        _Aviso(
+          mensagem: motivo,
+          acao: AdaptiveButton.secondary(
+            label: 'Reanalisar',
+            icon: AppIcons.refresh,
+            expanded: false,
+            isLoading: _controller.acao == AcaoResultado.reanalise,
+            onPressed: _controller.ocupado ? null : _reanalisar,
+          ),
+        ),
+      if (d.perguntas.isNotEmpty)
+        PerguntasPendentesCard(
+          detalhe: d,
+          controller: _controller,
+          onEnviar: _enviarRespostas,
+          onConfirmar: _confirmarRespostas,
+        ),
       if (d.textoResumo != null)
         AppSection(
           title: 'Resumo',
