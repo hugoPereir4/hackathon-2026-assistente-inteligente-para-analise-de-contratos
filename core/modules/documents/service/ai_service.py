@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from hashlib import sha256
 from difflib import SequenceMatcher
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -13,7 +14,7 @@ import httpx
 from pydantic import ValidationError
 
 from core.models import Company, CompanyFact, Document
-from .analysis_schema import DocumentAnalysis, EvidenceCorrections
+from .analysis_schema import DocumentAnalysis, EvidenceCorrections, Question
 from .diagnostics import capture_analysis, is_capturing, record
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,8 @@ Todo requisito deve indicar se depende do papel da empresa.
 Compare usando apenas referências existentes no contexto (cadastro.campo ou
 fatos.fact_key). Dados não confirmados e fatos de origem ai não comprovam nada.
 Sem evidências confirmadas suficientes, use desconhecido, nunca nao_atende.
+Uma obrigação prevista no contrato não comprova que a empresa a cumpre.
+Nunca use atende ou nao_atende com referencias_perfil vazias.
 Não infira certificações, receita ou experiência pelo CNAE, porte ou fundação.
 Um fato booleano confirmado false é uma negativa explícita; fato ausente é desconhecido.
 Para requisitos desconhecidos, gere perguntas concretas e agrupe os que dependem
@@ -136,6 +139,63 @@ def _analysis_evidence(analysis):
         yield "papel_empresa.evidencia", analysis.papel_empresa.evidencia, analysis.papel_empresa
 
 
+def _trusted_references(refs, context):
+    return bool(refs) and all(
+        ref in context and context[ref]["confirmado"]
+        and context[ref]["origem"] != CompanyFact.Source.AI
+        and context[ref]["valor"] is not None and context[ref]["valor"] != ""
+        for ref in refs
+    )
+
+
+def reconcile_untrusted_conclusions(analysis, context):
+    """Rebaixa conclusões sem suporte a lacunas; nunca promove uma conclusão."""
+    result = analysis.model_copy(deep=True)
+    for requirement in result.requisitos:
+        refs = requirement.referencias_perfil
+        # Referências inválidas continuam sendo rejeitadas pelo validador.
+        if (requirement.resultado == "desconhecido" or len(refs) != len(set(refs))
+                or any(ref not in context for ref in refs)):
+            continue
+        missing_role = requirement.depende_papel and result.papel_empresa.papel == "desconhecido"
+        if _trusted_references(refs, context) and not missing_role:
+            continue
+        previous = requirement.resultado
+        requirement.resultado = "desconhecido"
+        requirement.justificativa = (
+            "É necessário definir o papel da empresa para avaliar este requisito."
+            if missing_role else
+            "Não há dados confirmados suficientes no perfil para comprovar o atendimento deste requisito."
+        )
+        record("conclusion_reconciled", requirement_id=requirement.id, previous=previous,
+               reason="unknown_role" if missing_role else "unconfirmed_profile")
+        if any(requirement.id in q.requisito_ids for q in result.perguntas_pendentes):
+            continue
+        # Uma confirmação específica de atendimento é distinta dos fatos cadastrais.
+        digest = sha256(_normalize(requirement.descricao).encode("utf-8")).hexdigest()[:24]
+        key = None if missing_role else f"atendimento_{digest}"
+        destination = "papel" if missing_role else "company_fact"
+        existing = next((q for q in result.perguntas_pendentes
+                         if q.destino == destination and q.fato_chave == key), None)
+        if existing:
+            existing.requisito_ids.append(requirement.id)
+            continue
+        question_id = f"lacuna_{digest}"
+        used_ids = {q.id for q in result.perguntas_pendentes}
+        while question_id in used_ids:
+            question_id += "_nova"
+        result.perguntas_pendentes.append(Question(
+            id=question_id,
+            pergunta=("Qual é o papel da sua empresa neste documento: contratante ou fornecedora?"
+                      if missing_role else f"Sua empresa atende ao seguinte requisito? {requirement.descricao}"),
+            requisito_ids=[requirement.id], fato_chave=key, sobre_papel=missing_role,
+            destino=destination,
+            fato_rotulo=None if missing_role else f"Atendimento: {requirement.descricao}"[:255],
+            tipo_valor=None if missing_role else "booleano",
+        ))
+    return result
+
+
 def _repair_analysis_evidence(analysis, text, invalid_paths):
     """A IA escolhe linhas; o backend copia uma passagem contínua do original."""
     invalid = set(invalid_paths)
@@ -220,16 +280,12 @@ def validate_analysis(analysis, text, context):
         refs = requirement.referencias_perfil
         if len(refs) != len(set(refs)) or any(ref not in context for ref in refs):
             raise AIAnalysisError("A IA referenciou dados inexistentes do perfil.")
-        trusted = bool(refs) and all(
-            context[ref]["confirmado"]
-            and context[ref]["origem"] != CompanyFact.Source.AI
-            and context[ref]["valor"] is not None
-            and context[ref]["valor"] != ""
-            for ref in refs
-        )
+        trusted = _trusted_references(refs, context)
         if requirement.resultado != "desconhecido" and (
             not trusted or (requirement.depende_papel and role.papel == "desconhecido")
         ):
+            record("invalid_conclusion", requirement_id=requirement.id,
+                   references=refs, trusted=trusted, role=role.papel)
             raise AIAnalysisError("Conclusão sem dados confirmados ou papel definido.")
         if requirement.resultado == "desconhecido":
             unknown_ids.add(requirement.id)
@@ -406,6 +462,7 @@ def generate_validated_analysis(document, context):
             "contexto_empresa": context,
         }, schema=DocumentAnalysis,
     )
+    analysis = reconcile_untrusted_conclusions(analysis, context)
     try:
         validate_analysis(analysis, document.text_content, context)
     except EvidenceValidationError as exc:

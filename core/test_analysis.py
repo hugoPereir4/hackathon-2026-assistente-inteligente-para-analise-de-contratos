@@ -169,16 +169,19 @@ class AnalysisTests(APITestCase):
                 self.assertEqual(doc.analysis_json["aderencia"]["cobertura"], 0)
                 self.assertEqual(doc.outcome, "insufficient_data")
 
-    def test_untrusted_conclusions_are_rejected(self):
+    def test_untrusted_conclusions_become_unknown_with_questions(self):
         for source, confirmed in (("user", False), ("ai", True)):
             self.fact.source, self.fact.confirmed = source, confirmed
             self.fact.save()
             doc = self.new_document()
             with self.assertRaises(AIAnalysisError):
-                analyze_document_with_ai(doc)
+                validate_analysis(parse(answer()), TEXT, build_company_context(self.company))
+            analyze_document_with_ai(doc)
             doc.refresh_from_db()
-            self.assertEqual(doc.status, "failed")
-            self.assertIsNone(doc.analysis_json)
+            self.assertEqual(doc.status, "ready")
+            self.assertIsNone(doc.score)
+            self.assertEqual(doc.analysis_json["requisitos"][0]["resultado"], "desconhecido")
+            self.assertEqual(doc.analysis_json["perguntas_pendentes"][0]["requisito_ids"], ["r1"])
 
     def test_empty_profile_and_ambiguous_role(self):
         self.fact.delete()
@@ -520,7 +523,61 @@ class AnalysisTests(APITestCase):
         self.company.cnae_primary = "6201501"
         self.company.save()
         self.respond(answer(refs=["cadastro.cnae_primary"]))
-        self.assertEqual(self.post().status_code, 502)
+        response = self.post()
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["score"])
+        self.assertEqual(response.data["analysis_json"]["requisitos"][0]["resultado"], "desconhecido")
+
+    def test_contract_obligation_without_profile_refs_does_not_prove_compliance(self):
+        for conclusion in ("atende", "nao_atende"):
+            with self.subTest(conclusion=conclusion):
+                payload = answer(conclusion, [])
+                payload["requisitos"][0]["depende_papel"] = False
+                self.respond(payload)
+                response = self.post(self.new_document())
+                self.assertEqual(response.status_code, 200, response.data)
+                self.assertIsNone(response.data["score"])
+                analysis = response.data["analysis_json"]
+                self.assertEqual(analysis["requisitos"][0]["resultado"], "desconhecido")
+                self.assertEqual(analysis["aderencia"]["cobertura"], 0)
+                question = analysis["perguntas_pendentes"][0]
+                self.assertEqual(question["destino"], "company_fact")
+                self.assertEqual(question["tipo_valor"], "booleano")
+                self.assertEqual(question["requisito_ids"], ["r1"])
+
+    def test_unknown_role_is_asked_instead_of_assuming_compliance(self):
+        payload = answer()
+        payload["papel_empresa"].update(papel="desconhecido", evidencia=None)
+        self.respond(payload)
+        response = self.post()
+        self.assertEqual(response.status_code, 200, response.data)
+        analysis = response.data["analysis_json"]
+        self.assertEqual(analysis["requisitos"][0]["resultado"], "desconhecido")
+        self.assertEqual(analysis["perguntas_pendentes"][0]["destino"], "papel")
+
+    def test_reconciliation_preserves_questions_and_groups_duplicate_requirements(self):
+        from core.modules.documents.service.ai_service import reconcile_untrusted_conclusions
+        payload = answer("atende", [])
+        payload["requisitos"].append({**copy.deepcopy(payload["requisitos"][0]), "id": "r2"})
+        original = parse(payload)
+        context = build_company_context(self.company)
+        result = reconcile_untrusted_conclusions(original, context)
+        validate_analysis(result, TEXT, context)
+        self.assertEqual(original.requisitos[0].resultado, "atende")
+        self.assertEqual(len(result.perguntas_pendentes), 1)
+        self.assertEqual(result.perguntas_pendentes[0].requisito_ids, ["r1", "r2"])
+        repeated = reconcile_untrusted_conclusions(result, context)
+        self.assertEqual(repeated.model_dump(), result.model_dump())
+
+    def test_reconciliation_does_not_promote_unknown_or_hide_invalid_refs(self):
+        from core.modules.documents.service.ai_service import reconcile_untrusted_conclusions
+        context = build_company_context(self.company)
+        unknown = parse(answer("desconhecido"))
+        self.assertEqual(reconcile_untrusted_conclusions(unknown, context).model_dump(), unknown.model_dump())
+        for refs in (["fatos.inexistente"], ["fatos.iso_9001", "fatos.iso_9001"]):
+            result = reconcile_untrusted_conclusions(parse(answer(refs=refs)), context)
+            with self.assertRaises(AIAnalysisError):
+                validate_analysis(result, TEXT, context)
 
     def test_analysis_fields_are_read_only(self):
         from core.modules.documents.serializer import DocumentDetailSerializer

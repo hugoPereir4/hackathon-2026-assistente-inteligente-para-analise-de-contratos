@@ -157,6 +157,16 @@ Credenciais nunca aparecem no contexto ou nos metadados.
 
 ### Diagnóstico reproduzível
 
+Conclusões `atende` ou `nao_atende` sem referências confirmadas suficientes, ou
+dependentes de um papel ainda desconhecido, são convertidas em `desconhecido`
+antes da validação. O backend preserva perguntas existentes ou cria uma pergunta
+pendente para o requisito. A obrigação escrita no contrato, por si só, não
+comprova atendimento. Esses requisitos ficam fora do cálculo da pontuação;
+sem requisitos avaliáveis, a pontuação é nula. Referências inexistentes ou
+duplicadas e citações inválidas continuam sujeitas à validação estrita.
+Cada conversão gera um evento `conclusion_reconciled` no diagnóstico, quando
+a captura está habilitada, sem nova chamada à IA ou confirmação automática de fatos.
+
 Com `DEBUG=True`, `AI_DIAGNOSTICS_ENABLED` fica habilitado por padrão. Cada análise
 grava um JSON em `.diagnostics/analysis/` com ID, horário, versão do serviço (SHA-256),
 prompt, modelo, schema, dados enviados, respostas e etapas de validação. Uma falha
