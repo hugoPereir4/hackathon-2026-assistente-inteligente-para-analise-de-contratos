@@ -51,8 +51,12 @@ abstract final class MatchStyle {
   /// Texto padrão quando não há outcome.
   static String vereditoPadrao(int? score) {
     if (score == null) return 'A análise ainda não tem score.';
-    if (score >= 75) return 'O documento combina bem com o perfil da sua empresa.';
-    if (score >= 50) return 'Há pontos que precisam de atenção antes de seguir.';
+    if (score >= 75) {
+      return 'O documento combina bem com o perfil da sua empresa.';
+    }
+    if (score >= 50) {
+      return 'Há pontos que precisam de atenção antes de seguir.';
+    }
     return 'O documento tem exigências difíceis de atender com o perfil atual.';
   }
 
@@ -70,12 +74,14 @@ abstract final class MatchStyle {
 
   static IconData iconeDoRequisito(StatusRequisito s) => switch (s) {
         StatusRequisito.atendido => AppIcons.checkCircle,
+        StatusRequisito.parcialmenteAtendido => AppIcons.warning,
         StatusRequisito.naoAtendido => AppIcons.cancelCircle,
         StatusRequisito.indefinido => AppIcons.helpCircle,
       };
 
   static Color corDoRequisito(StatusRequisito s) => switch (s) {
         StatusRequisito.atendido => AppColors.success,
+        StatusRequisito.parcialmenteAtendido => AppColors.warning,
         StatusRequisito.naoAtendido => AppColors.danger,
         StatusRequisito.indefinido => AppColors.textSecondary,
       };

@@ -87,6 +87,16 @@ void main() {
     expect(d.resultado, ResultadoMatch.boaAderencia);
   });
 
+  test('lê contagem e status de requisitos parcialmente atendidos', () {
+    final analysis = _exemplo();
+    final adherence = analysis['aderencia'] as Map<String, dynamic>;
+    adherence['parcialmente_atendidos'] = 1;
+    (analysis['requisitos'] as List<dynamic>)[0]['resultado'] = 'parcialmente_atende';
+    final d = AnaliseDetalhe.fromJson(analysis);
+    expect(d.aderencia?.parcialmenteAtendidos, 1);
+    expect(d.requisitos.first.status, StatusRequisito.parcialmenteAtendido);
+  });
+
   test('aceita o analysis_json puro, sem o documento em volta', () {
     final d = AnaliseDetalhe.fromJson(_exemplo());
     expect(d.score, 67);

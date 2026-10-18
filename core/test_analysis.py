@@ -13,10 +13,11 @@ from rest_framework.test import APITestCase
 from core.models import Company, CompanyFact, Document
 from core.modules.documents.service.ai_service import (
     AIAnalysisError, AnalysisStateError, SYSTEM_INSTRUCTION,
-    analyze_document_with_ai, build_company_context, calculate_adherence,
+    analyze_document_with_ai, audit_additional_requirements, build_company_context,
+    calculate_adherence, generate_validated_analysis, merge_requirements_audit,
     validate_analysis,
 )
-from core.modules.documents.service.analysis_schema import DocumentAnalysis
+from core.modules.documents.service.analysis_schema import DocumentAnalysis, RequirementsAudit
 
 
 TEXT = "A empresa Exemplo é fornecedora. Exige-se ISO 9001. Multa de 10%. Entrega em 30 dias após assinatura."
@@ -227,6 +228,109 @@ class AnalysisTests(APITestCase):
         self.assertIsNone(adherence["score"])
         self.assertIsNone(adherence["cobertura"])
         self.assertEqual(outcome, "insufficient_data")
+
+    def test_partial_requirements_count_half_and_preserve_coverage(self):
+        payload = answer("atende")
+        partial = copy.deepcopy(payload["requisitos"][0])
+        partial.update(id="r2", resultado="parcialmente_atende", obrigatorio=False)
+        unmet = copy.deepcopy(partial)
+        unmet.update(id="r3", resultado="nao_atende")
+        unknown = copy.deepcopy(partial)
+        unknown.update(id="r4", resultado="desconhecido", referencias_perfil=[])
+        payload["requisitos"] += [partial, unmet, unknown]
+        adherence, outcome = calculate_adherence(parse(payload))
+        self.assertEqual(adherence["score"], 50)
+        self.assertEqual(adherence["cobertura"], 75)
+        self.assertEqual(adherence["avaliados"], 3)
+        self.assertEqual(adherence["parcialmente_atendidos"], 1)
+        self.assertEqual(adherence["desconhecidos"], 1)
+        self.assertEqual(outcome, "insufficient_data")
+        rounding = answer("parcialmente_atende")
+        rounding["requisitos"] = [copy.deepcopy(rounding["requisitos"][0]) for _ in range(3)]
+        rounding["requisitos"][1].update(id="r2", resultado="nao_atende")
+        rounding["requisitos"][2].update(id="r3", resultado="nao_atende")
+        self.assertEqual(calculate_adherence(parse(rounding))[0]["score"], 17)
+
+    def test_partial_result_is_saved_and_exposed_by_analysis_endpoint(self):
+        self.respond(answer("parcialmente_atende"))
+        response = self.post()
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["score"], 50)
+        self.assertEqual(response.data["outcome"], "high_risk")
+        self.assertEqual(response.data["analysis_json"]["aderencia"]["parcialmente_atendidos"], 1)
+        self.assertEqual(
+            response.data["analysis_json"]["requisitos"][0]["resultado"],
+            "parcialmente_atende",
+        )
+
+    def test_partial_required_is_high_risk_but_unmet_required_is_incompatible(self):
+        partial, outcome = calculate_adherence(parse(answer("parcialmente_atende")))
+        self.assertEqual(partial["score"], 50)
+        self.assertEqual(outcome, "high_risk")
+        _, outcome = calculate_adherence(parse(answer("nao_atende")))
+        self.assertEqual(outcome, "incompatible")
+
+    def test_partial_conclusions_require_confirmed_profile_references(self):
+        payload = answer("parcialmente_atende", [])
+        with self.assertRaises(AIAnalysisError):
+            validate_analysis(parse(payload), TEXT, build_company_context(self.company))
+
+    def test_long_document_with_few_requirements_gets_focused_audit(self):
+        text = TEXT + ("\n" + TEXT) * 100
+        initial = parse(answer())
+        audit = RequirementsAudit.model_validate({
+            "requisitos_adicionais": [{
+                "id": "audit-1", "descricao": "Prove tax compliance",
+                "obrigatorio": True, "resultado": "desconhecido", "depende_papel": False,
+                "justificativa": "Profile has no confirmed fact for this requirement.",
+                "evidencia": copy.deepcopy(EVIDENCE), "referencias_perfil": [],
+            }],
+            "perguntas_adicionais": [{
+                "id": "audit-q1", "pergunta": "Is your company tax compliant?",
+                "requisito_ids": ["audit-1"], "fato_chave": "regularidade_fiscal",
+                "sobre_papel": False, "destino": "company_fact",
+                "fato_rotulo": "Regularidade fiscal", "tipo_valor": "booleano",
+            }],
+        })
+        document = SimpleNamespace(pk=55, doc_type="tender", text_content=text)
+        with patch(
+            "core.modules.documents.service.ai_service.generate_structured",
+            side_effect=[(initial, "test-model"), (audit, "test-model")],
+        ) as generate:
+            result, _ = generate_validated_analysis(document, build_company_context(self.company))
+        self.assertEqual(generate.call_count, 2)
+        self.assertEqual(len(result.requisitos), 2)
+        additional = result.requisitos[1]
+        self.assertTrue(additional.id.startswith("extra_"))
+        self.assertEqual(result.perguntas_pendentes[0].requisito_ids, [additional.id])
+
+    def test_audit_deduplicates_and_falls_back_on_invalid_evidence(self):
+        initial = parse(answer())
+        duplicate = RequirementsAudit.model_validate({
+            "requisitos_adicionais": [{
+                **copy.deepcopy(answer()["requisitos"][0]), "id": "duplicate-id",
+            }],
+            "perguntas_adicionais": [],
+        })
+        merged = merge_requirements_audit(initial, duplicate)
+        self.assertEqual(len(merged.requisitos), 1)
+
+        text = TEXT + ("\n" + TEXT) * 100
+        invalid = RequirementsAudit.model_validate({
+            "requisitos_adicionais": [{
+                **copy.deepcopy(answer()["requisitos"][0]), "id": "audit-invalid",
+                "descricao": "Different requirement",
+                "evidencia": {"trecho": "missing quote", "clausula": None},
+            }],
+            "perguntas_adicionais": [],
+        })
+        document = SimpleNamespace(pk=56, doc_type="contract", text_content=text)
+        with patch(
+            "core.modules.documents.service.ai_service.generate_structured",
+            return_value=(invalid, "test-model"),
+        ):
+            result = audit_additional_requirements(document, initial, build_company_context(self.company))
+        self.assertEqual(len(result.requisitos), 1)
 
     def test_invalid_responses_fail_without_partial_persistence(self):
         variants = []

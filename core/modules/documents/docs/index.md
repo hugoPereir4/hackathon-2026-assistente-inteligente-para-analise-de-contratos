@@ -81,7 +81,7 @@ O campo `file` só existe no upload e nunca volta nas respostas.
 | Valor               | Significado |
 | ------------------- | ----------- |
 | `good_fit`          | A empresa atende ao documento. |
-| `high_risk`         | Existe risco alto ou crítico. |
+| `high_risk`         | Existe risco alto/crítico ou requisito obrigatório parcialmente atendido. |
 | `incompatible`      | Algum requisito obrigatório não é atendido. |
 | `insufficient_data` | Faltam dados da empresa para concluir. Há perguntas em `perguntas_pendentes`. |
 
@@ -100,9 +100,9 @@ Resumo do que interessa para a tela. O contrato completo e as regras de validaç
 | `valores`             | Lista de `{ descricao, categoria, moeda, montante, percentual, aproximado, evidencia }`. `montante` e `percentual` são **strings** decimais (`"123456.90"`). |
 | `obrigacoes`          | Lista de `{ descricao, parte_responsavel, prazo_id, evidencia }`. |
 | `riscos`              | Lista de `{ descricao, severidade, impacto, recomendacao, evidencia }`. `severidade`: `"baixa"`, `"media"`, `"alta"` ou `"critica"`. |
-| `requisitos`          | Lista de `{ id, descricao, obrigatorio, resultado, depende_papel, justificativa, evidencia, referencias_perfil }`. `resultado`: `"atende"`, `"nao_atende"` ou `"desconhecido"`. |
+| `requisitos`          | Lista de `{ id, descricao, obrigatorio, resultado, depende_papel, justificativa, evidencia, referencias_perfil }`. `resultado`: `"atende"`, `"parcialmente_atende"`, `"nao_atende"` ou `"desconhecido"`. |
 | `perguntas_pendentes` | Perguntas para o usuário. Ver [Respondendo perguntas](#respondendo-perguntas). |
-| `aderencia`           | `{ score, cobertura, total, avaliados, atendidos, nao_atendidos, desconhecidos }`. |
+| `aderencia`           | `{ score, cobertura, total, avaliados, atendidos, parcialmente_atendidos, nao_atendidos, desconhecidos }`. |
 | `outcome`             | O mesmo valor de `Document.outcome`. |
 | `metadados`           | `{ analisado_em, modelo, contexto_empresa }`. |
 
