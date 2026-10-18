@@ -117,7 +117,7 @@ class AnswerFlowTests(APITransactionTestCase):
         self.assertTrue(response.data["respostas_salvas"])
         self.assertEqual(response.data["reavaliacao"], {"status": "ready", "erro": None})
         result = response.data["documento"]
-        self.assertEqual((result["status"], result["score"], result["outcome"]), ("ready", 100, "good_fit"))
+        self.assertEqual((result["status"], result["score"], result["outcome"]), ("ready", 92, "good_fit"))
         self.assertFalse(result["analysis_desatualizada"])
         self.assertEqual(result["analysis_json"]["perguntas_pendentes"], [])
         batch.refresh_from_db()

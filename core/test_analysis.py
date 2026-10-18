@@ -25,7 +25,10 @@ EVIDENCE = {"trecho": "Exige-se ISO 9001.", "clausula": None}
 REAL_GENAI_CLIENT = genai.Client
 
 
-def answer(result="atende", refs=None):
+AI_SCORES = {"atende": 92, "parcialmente_atende": 55, "nao_atende": 15, "desconhecido": 40}
+
+
+def answer(result="atende", refs=None, score=None):
     return {
         "resumo": "Contrato de fornecimento com certificação obrigatória.",
         "papel_empresa": {
@@ -43,9 +46,11 @@ def answer(result="atende", refs=None):
         "perguntas_pendentes": [] if result != "desconhecido" else [{
             "id": "q1", "pergunta": "Sua empresa possui ISO 9001?",
             "requisito_ids": ["r1"], "fato_chave": "iso_9001",
-            "sobre_papel": False, "destino": "company_fact",
+            "destino": "company_fact",
             "fato_rotulo": "ISO 9001", "tipo_valor": "booleano",
         }],
+        "score": AI_SCORES[result] if score is None else score,
+        "justificativa_score": "Nota atribuída pela IA a partir do contexto do contrato.",
     }
 
 
@@ -91,7 +96,7 @@ class AnalysisTests(APITestCase):
         self.document.refresh_from_db()
         data = self.document.analysis_json
         self.assertEqual(data["schema_version"], 2)
-        self.assertEqual(data["aderencia"]["score"], 100)
+        self.assertEqual(data["aderencia"]["score"], 92)
         self.assertEqual(data["aderencia"]["cobertura"], 100)
         self.assertEqual(data["metadados"]["modelo"], "test-model")
         self.assertEqual(self.document.outcome, "good_fit")
@@ -100,7 +105,7 @@ class AnalysisTests(APITestCase):
         detail = self.client.get(f"/api/v1/documents/{self.document.pk}/").data
         self.assertEqual(detail["analysis_json"], data)
         listing = self.client.get("/api/v1/documents/").data["results"][0]
-        self.assertEqual((listing["score"], listing["cobertura"], listing["outcome"]), (100, 100, "good_fit"))
+        self.assertEqual((listing["score"], listing["cobertura"], listing["outcome"]), (92, 100, "good_fit"))
         self.assertNotIn("analysis_json", listing)
         self.assertEqual(self.generate.call_count, 1)
         config = self.generate.call_args.kwargs["config"]
@@ -150,7 +155,7 @@ class AnalysisTests(APITestCase):
         analyze_document_with_ai(second)
         self.assertEqual(self.document.outcome, "good_fit")
         self.assertEqual(second.outcome, "incompatible")
-        self.assertEqual(second.score, 0)
+        self.assertEqual(second.score, 15)
 
     def test_absent_unconfirmed_and_ai_facts_remain_unknown(self):
         for variant in ("unconfirmed", "ai", "absent"):
@@ -166,7 +171,7 @@ class AnalysisTests(APITestCase):
                 self.respond(payload)
                 doc = self.new_document()
                 analyze_document_with_ai(doc)
-                self.assertIsNone(doc.score)
+                self.assertEqual(doc.score, 40)
                 self.assertEqual(doc.analysis_json["aderencia"]["cobertura"], 0)
                 self.assertEqual(doc.outcome, "insufficient_data")
 
@@ -180,7 +185,8 @@ class AnalysisTests(APITestCase):
             analyze_document_with_ai(doc)
             doc.refresh_from_db()
             self.assertEqual(doc.status, "ready")
-            self.assertIsNone(doc.score)
+            # A nota continua sendo a da IA; só a conclusão do requisito é rebaixada.
+            self.assertEqual(doc.score, 92)
             self.assertEqual(doc.analysis_json["requisitos"][0]["resultado"], "desconhecido")
             self.assertEqual(doc.analysis_json["perguntas_pendentes"][0]["requisito_ids"], ["r1"])
 
@@ -191,11 +197,8 @@ class AnalysisTests(APITestCase):
         self.company.save()
         payload = answer("desconhecido", [])
         payload["papel_empresa"].update(papel="desconhecido", evidencia=None)
-        payload["perguntas_pendentes"] = [{
-            "id": "q1", "pergunta": "A empresa será fornecedora ou contratante?",
-            "requisito_ids": ["r1"], "fato_chave": None, "sobre_papel": True,
-            "destino": "papel", "fato_rotulo": None, "tipo_valor": None,
-        }]
+        # O papel não é perguntado: a lacuna que depende dele fica sem pergunta.
+        payload["perguntas_pendentes"] = []
         self.respond(payload)
         self.assertEqual(self.post().status_code, 200)
         self.document.refresh_from_db()
@@ -210,7 +213,7 @@ class AnalysisTests(APITestCase):
         payload["requisitos"] += [optional, unknown]
         analysis = parse(payload)
         adherence, outcome = calculate_adherence(analysis)
-        self.assertEqual((adherence["score"], adherence["cobertura"]), (50, 67))
+        self.assertEqual((adherence["score"], adherence["cobertura"]), (92, 67))
         self.assertEqual(outcome, "insufficient_data")
         analysis.riscos = parse({**answer(), "riscos": [{
             "descricao": "Multa", "severidade": "alta", "impacto": "Perda financeira",
@@ -225,11 +228,11 @@ class AnalysisTests(APITestCase):
         self.assertEqual(calculate_adherence(analysis)[1], "good_fit")
         analysis.requisitos = []
         adherence, outcome = calculate_adherence(analysis)
-        self.assertIsNone(adherence["score"])
+        self.assertEqual(adherence["score"], 92)
         self.assertIsNone(adherence["cobertura"])
         self.assertEqual(outcome, "insufficient_data")
 
-    def test_partial_requirements_count_half_and_preserve_coverage(self):
+    def test_partial_requirements_are_counted_and_preserve_coverage(self):
         payload = answer("atende")
         partial = copy.deepcopy(payload["requisitos"][0])
         partial.update(id="r2", resultado="parcialmente_atende", obrigatorio=False)
@@ -239,7 +242,7 @@ class AnalysisTests(APITestCase):
         unknown.update(id="r4", resultado="desconhecido", referencias_perfil=[])
         payload["requisitos"] += [partial, unmet, unknown]
         adherence, outcome = calculate_adherence(parse(payload))
-        self.assertEqual(adherence["score"], 50)
+        self.assertEqual(adherence["score"], 92)
         self.assertEqual(adherence["cobertura"], 75)
         self.assertEqual(adherence["avaliados"], 3)
         self.assertEqual(adherence["parcialmente_atendidos"], 1)
@@ -249,13 +252,13 @@ class AnalysisTests(APITestCase):
         rounding["requisitos"] = [copy.deepcopy(rounding["requisitos"][0]) for _ in range(3)]
         rounding["requisitos"][1].update(id="r2", resultado="nao_atende")
         rounding["requisitos"][2].update(id="r3", resultado="nao_atende")
-        self.assertEqual(calculate_adherence(parse(rounding))[0]["score"], 17)
+        self.assertEqual(calculate_adherence(parse(rounding))[0]["score"], 55)
 
     def test_partial_result_is_saved_and_exposed_by_analysis_endpoint(self):
         self.respond(answer("parcialmente_atende"))
         response = self.post()
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data["score"], 50)
+        self.assertEqual(response.data["score"], 55)
         self.assertEqual(response.data["outcome"], "high_risk")
         self.assertEqual(response.data["analysis_json"]["aderencia"]["parcialmente_atendidos"], 1)
         self.assertEqual(
@@ -265,7 +268,7 @@ class AnalysisTests(APITestCase):
 
     def test_partial_required_is_high_risk_but_unmet_required_is_incompatible(self):
         partial, outcome = calculate_adherence(parse(answer("parcialmente_atende")))
-        self.assertEqual(partial["score"], 50)
+        self.assertEqual(partial["score"], 55)
         self.assertEqual(outcome, "high_risk")
         _, outcome = calculate_adherence(parse(answer("nao_atende")))
         self.assertEqual(outcome, "incompatible")
@@ -288,7 +291,7 @@ class AnalysisTests(APITestCase):
             "perguntas_adicionais": [{
                 "id": "audit-q1", "pergunta": "Is your company tax compliant?",
                 "requisito_ids": ["audit-1"], "fato_chave": "regularidade_fiscal",
-                "sobre_papel": False, "destino": "company_fact",
+                "destino": "company_fact",
                 "fato_rotulo": "Regularidade fiscal", "tipo_valor": "booleano",
             }],
         })
@@ -344,7 +347,16 @@ class AnalysisTests(APITestCase):
             variants.append(json.dumps(payload))
         duplicate = answer()
         duplicate["requisitos"] *= 2
-        variants += [json.dumps(duplicate), "not json", "", json.dumps({**answer(), "score": 100})]
+        role_question = answer("desconhecido")
+        role_question["perguntas_pendentes"][0]["destino"] = "papel"
+        variants += [
+            json.dumps(duplicate), "not json", "", json.dumps({**answer(), "score": 101}),
+            json.dumps({**answer(), "score": "90"}), json.dumps({**answer(), "pontuacao": 90}),
+            json.dumps(role_question),
+        ]
+        missing_score = answer()
+        del missing_score["score"]
+        variants.append(json.dumps(missing_score))
         nested_extra = answer()
         nested_extra["requisitos"][0]["evidencia"]["pagina"] = 99
         variants.append(json.dumps(nested_extra))
@@ -571,7 +583,7 @@ class AnalysisTests(APITestCase):
         self.generate.side_effect = None
         analyze_document_with_ai(self.document, retry_failed=True)
         self.assertEqual(self.document.status, "ready")
-        self.assertEqual(self.document.score, 100)
+        self.assertEqual(self.document.score, 92)
         self.assertEqual(self.generate.call_count, 2)
         with self.assertRaises(AnalysisStateError):
             analyze_document_with_ai(self.document, retry_failed=True)
@@ -629,7 +641,7 @@ class AnalysisTests(APITestCase):
         self.respond(answer(refs=["cadastro.cnae_primary"]))
         response = self.post()
         self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.data["score"])
+        self.assertEqual(response.data["score"], 92)
         self.assertEqual(response.data["analysis_json"]["requisitos"][0]["resultado"], "desconhecido")
 
     def test_contract_obligation_without_profile_refs_does_not_prove_compliance(self):
@@ -640,7 +652,7 @@ class AnalysisTests(APITestCase):
                 self.respond(payload)
                 response = self.post(self.new_document())
                 self.assertEqual(response.status_code, 200, response.data)
-                self.assertIsNone(response.data["score"])
+                self.assertEqual(response.data["score"], AI_SCORES[conclusion])
                 analysis = response.data["analysis_json"]
                 self.assertEqual(analysis["requisitos"][0]["resultado"], "desconhecido")
                 self.assertEqual(analysis["aderencia"]["cobertura"], 0)
@@ -649,7 +661,7 @@ class AnalysisTests(APITestCase):
                 self.assertEqual(question["tipo_valor"], "booleano")
                 self.assertEqual(question["requisito_ids"], ["r1"])
 
-    def test_unknown_role_is_asked_instead_of_assuming_compliance(self):
+    def test_unknown_role_leaves_requirement_unknown_without_asking_the_role(self):
         payload = answer()
         payload["papel_empresa"].update(papel="desconhecido", evidencia=None)
         self.respond(payload)
@@ -657,7 +669,23 @@ class AnalysisTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.data)
         analysis = response.data["analysis_json"]
         self.assertEqual(analysis["requisitos"][0]["resultado"], "desconhecido")
-        self.assertEqual(analysis["perguntas_pendentes"][0]["destino"], "papel")
+        self.assertEqual(analysis["perguntas_pendentes"], [])
+        self.assertEqual(response.data["outcome"], "insufficient_data")
+
+    def test_score_comes_from_the_ai_not_from_the_requirement_ratio(self):
+        payload = answer("atende", score=37)
+        self.respond(payload)
+        response = self.post()
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["score"], 37)
+        aderencia = response.data["analysis_json"]["aderencia"]
+        self.assertEqual((aderencia["score"], aderencia["atendidos"], aderencia["avaliados"]), (37, 1, 1))
+        self.assertEqual(
+            response.data["analysis_json"]["justificativa_score"],
+            payload["justificativa_score"],
+        )
+        self.assertIn("score de 0 a 100", SYSTEM_INSTRUCTION)
+        self.assertNotIn("sobre_papel", SYSTEM_INSTRUCTION)
 
     def test_reconciliation_preserves_questions_and_groups_duplicate_requirements(self):
         from core.modules.documents.service.ai_service import reconcile_untrusted_conclusions

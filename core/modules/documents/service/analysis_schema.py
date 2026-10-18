@@ -1,4 +1,4 @@
-"""Contrato da IA; indicadores e metadados são adicionados pelo backend."""
+"""Contrato da IA. O score vem da IA; cobertura, outcome e metadados são do backend."""
 from datetime import date
 from typing import Annotated, Literal
 
@@ -8,6 +8,7 @@ Text = Annotated[str, Field(min_length=1, pattern=r"\S")]
 DecimalText = Annotated[str, Field(pattern=r"^-?\d+(\.\d+)?$")]
 ValueType = Literal["booleano", "inteiro", "decimal", "texto", "data", "objeto"]
 ScalarType = Literal["booleano", "inteiro", "decimal", "texto", "data"]
+Score = Annotated[int, Field(ge=0, le=100)]
 
 
 class Schema(BaseModel):
@@ -85,8 +86,7 @@ class Question(Schema):
     pergunta: Text
     requisito_ids: list[Text]
     fato_chave: Text | None
-    sobre_papel: bool
-    destino: Literal["company_fact", "cadastro", "papel"]
+    destino: Literal["company_fact", "cadastro"]
     fato_rotulo: Annotated[str, Field(min_length=1, max_length=255, pattern=r"\S")] | None
     tipo_valor: ValueType | None
 
@@ -100,6 +100,9 @@ class DocumentAnalysis(Schema):
     riscos: list[Risk]
     requisitos: list[Requirement]
     perguntas_pendentes: list[Question]
+    # Por último: a IA atribui a nota depois de extrair e comparar tudo.
+    score: Score
+    justificativa_score: Text
 
 
 class RequirementsAudit(Schema):

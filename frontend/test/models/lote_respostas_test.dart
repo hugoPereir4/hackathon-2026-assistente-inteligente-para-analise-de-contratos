@@ -128,10 +128,10 @@ void main() {
           },
         });
 
-    test('só perguntas company_fact podem ser respondidas', () {
+    test('a pergunta sobre o papel (de análises antigas) não aparece', () {
       final d = detalhe(2);
       expect(d.versaoAntiga, isFalse);
-      expect(d.perguntas, hasLength(2));
+      expect(d.perguntas.map((p) => p.id), ['q1']);
       expect(d.perguntasRespondiveis.map((p) => p.id), ['q1']);
       expect(d.perguntasRespondiveis.single.tipoValor, 'booleano');
     });

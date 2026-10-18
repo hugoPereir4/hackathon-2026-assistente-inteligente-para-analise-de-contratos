@@ -36,7 +36,7 @@ Não abrevie com "..." ou "…", não junte passagens separadas e não parafrase
 Prefira citações curtas e completas que sustentem a conclusão, preservando
 negações, valores e condições. Evidência não é resumo.
 Identifique a empresa pelas partes e pelo CNPJ/razão social. Se o papel não estiver
-claro, use desconhecido e gere pergunta sobre_papel=true. Não presuma a parte.
+claro, use desconhecido. Não presuma a parte e não pergunte ao usuário sobre o papel.
 Todo requisito deve indicar se depende do papel da empresa.
 Compare usando apenas referências existentes no contexto (cadastro.campo ou
 fatos.fact_key). Dados não confirmados e fatos de origem ai não comprovam nada.
@@ -50,20 +50,30 @@ Não infira certificações, receita ou experiência pelo CNAE, porte ou fundaç
 Um fato booleano confirmado false é uma negativa explícita; fato ausente é desconhecido.
 Para requisitos desconhecidos, gere perguntas concretas e agrupe os que dependem
 da mesma informação. requisito_ids referencia apenas requisitos desconhecidos.
-Cada pergunta deve ter destino company_fact, cadastro ou papel.
+Cada pergunta deve ter destino company_fact ou cadastro. Requisitos desconhecidos
+apenas porque o papel da empresa não está claro não geram perguntas.
 Para company_fact, fato_chave deve identificar o fato mesmo quando ainda não existe:
 use snake_case ASCII (máximo 100 caracteres), reutilizando chaves existentes e
 sem usar nomes de campos cadastrais ou de autenticação. Informe fato_rotulo e
 tipo_valor (booleano, inteiro, decimal, texto, data ou objeto).
 Para cadastro use fato_chave igual ao campo cadastral e fato_rotulo/tipo_valor null.
-Para papel use destino papel, sobre_papel true e fato_chave/fato_rotulo/tipo_valor null.
 Não agrupe fatos distintos na mesma pergunta. Para fatos existentes, mantenha o
 tipo e o formato do valor cadastrado. Não armazene o papel da empresa como um fato.
 Use IDs únicos para requisitos, prazos e perguntas; prazo_id referencia um prazo.
 Datas explícitas usam YYYY-MM-DD; prazos relativos preservam o evento de referência.
 Montantes e percentuais são strings decimais sem separador de milhar (ex.: "1500.50").
 Preserve aproximações e condições na descrição e evidência, sinalizando aproximado.
-Não calcule score, cobertura, outcome nem metadados: isso é responsabilidade do backend.
+Por último, atribua score de 0 a 100: o quanto vale a pena a empresa assinar ou
+participar deste documento, considerando todo o contexto. Pese o atendimento dos
+requisitos (obrigatórios pesam mais que desejáveis), a gravidade dos riscos, multas
+e garantias, a viabilidade dos prazos e se o porte, o ramo e a capacidade da empresa
+são compatíveis com o objeto e os valores. Use só dados confirmados do perfil; o que
+for desconhecido reduz a confiança, mas não equivale a não atender. Referência:
+80 a 100 compatível e com riscos controláveis; 50 a 79 viável, mas exige negociação
+ou ajustes; 20 a 49 riscos altos ou lacunas importantes; 0 a 19 requisitos
+obrigatórios descumpridos ou objeto incompatível com a empresa. Explique a nota em
+justificativa_score, em uma ou duas frases. Não calcule cobertura, outcome nem
+metadados: isso é responsabilidade do backend.
 """
 
 
@@ -193,20 +203,20 @@ def reconcile_untrusted_conclusions(analysis, context):
         previous = requirement.resultado
         requirement.resultado = "desconhecido"
         requirement.justificativa = (
-            "É necessário definir o papel da empresa para avaliar este requisito."
+            "O papel da empresa no documento não está claro para avaliar este requisito."
             if missing_role else
             "Não há dados confirmados suficientes no perfil para comprovar o atendimento deste requisito."
         )
         record("conclusion_reconciled", requirement_id=requirement.id, previous=previous,
                reason="unknown_role" if missing_role else "unconfirmed_profile")
-        if any(requirement.id in q.requisito_ids for q in result.perguntas_pendentes):
+        # Não se pergunta o papel ao usuário: a lacuna fica sem pergunta.
+        if missing_role or any(requirement.id in q.requisito_ids for q in result.perguntas_pendentes):
             continue
         # Uma confirmação específica de atendimento é distinta dos fatos cadastrais.
         digest = sha256(_normalize(requirement.descricao).encode("utf-8")).hexdigest()[:24]
-        key = None if missing_role else f"atendimento_{digest}"
-        destination = "papel" if missing_role else "company_fact"
+        key = f"atendimento_{digest}"
         existing = next((q for q in result.perguntas_pendentes
-                         if q.destino == destination and q.fato_chave == key), None)
+                         if q.destino == "company_fact" and q.fato_chave == key), None)
         if existing:
             existing.requisito_ids.append(requirement.id)
             continue
@@ -216,12 +226,9 @@ def reconcile_untrusted_conclusions(analysis, context):
             question_id += "_nova"
         result.perguntas_pendentes.append(Question(
             id=question_id,
-            pergunta=("Qual é o papel da sua empresa neste documento: contratante ou fornecedora?"
-                      if missing_role else f"Sua empresa atende ao seguinte requisito? {requirement.descricao}"),
-            requisito_ids=[requirement.id], fato_chave=key, sobre_papel=missing_role,
-            destino=destination,
-            fato_rotulo=None if missing_role else f"Atendimento: {requirement.descricao}"[:255],
-            tipo_valor=None if missing_role else "booleano",
+            pergunta=f"Sua empresa atende ao seguinte requisito? {requirement.descricao}",
+            requisito_ids=[requirement.id], fato_chave=key, destino="company_fact",
+            fato_rotulo=f"Atendimento: {requirement.descricao}"[:255], tipo_valor="booleano",
         ))
     return result
 
@@ -306,6 +313,8 @@ def validate_analysis(analysis, text, context):
         if obligation.prazo_id is not None and obligation.prazo_id not in deadline_ids:
             raise AIAnalysisError("A IA referenciou um prazo inexistente.")
     unknown_ids = set()
+    # Lacunas que dependem só do papel ficam sem pergunta (o papel não é perguntado).
+    role_only_gaps = set()
     for requirement in analysis.requisitos:
         refs = requirement.referencias_perfil
         if len(refs) != len(set(refs)) or any(ref not in context for ref in refs):
@@ -319,43 +328,34 @@ def validate_analysis(analysis, text, context):
             raise AIAnalysisError("Conclusão sem dados confirmados ou papel definido.")
         if requirement.resultado == "desconhecido":
             unknown_ids.add(requirement.id)
+            if requirement.depende_papel and role.papel == "desconhecido":
+                role_only_gaps.add(requirement.id)
 
     covered = set()
     question_groups = set()
-    role_question = False
     for question in analysis.perguntas_pendentes:
         refs = question.requisito_ids
         if len(refs) != len(set(refs)) or not set(refs) <= requirement_ids:
             raise AIAnalysisError("Pergunta referencia requisitos inválidos.")
-        if not set(refs) <= unknown_ids or (not refs and not question.sobre_papel):
+        if not refs or not set(refs) <= unknown_ids:
             raise AIAnalysisError("Pergunta sem lacuna de comparação correspondente.")
         if question.destino == "company_fact":
             if (
                 not valid_fact_key(question.fato_chave) or not question.fato_rotulo
-                or question.tipo_valor is None or question.sobre_papel
+                or question.tipo_valor is None
             ):
                 raise AIAnalysisError("Pergunta sem destino de fato válido.")
-        elif question.destino == "cadastro":
-            if (
-                f"cadastro.{question.fato_chave}" not in context or question.sobre_papel
-                or question.fato_rotulo is not None or question.tipo_valor is not None
-            ):
-                raise AIAnalysisError("Pergunta cadastral inválida.")
         elif (
-            not question.sobre_papel or question.fato_chave is not None
+            f"cadastro.{question.fato_chave}" not in context
             or question.fato_rotulo is not None or question.tipo_valor is not None
         ):
-            raise AIAnalysisError("Pergunta sobre papel inválida.")
-        if question.sobre_papel and role.papel != "desconhecido":
-            raise AIAnalysisError("Pergunta sobre um papel já resolvido.")
+            raise AIAnalysisError("Pergunta cadastral inválida.")
         group = (question.destino, question.fato_chave)
-        if group is not None:
-            if group in question_groups:
-                raise AIAnalysisError("Perguntas sobre a mesma informação devem ser agrupadas.")
-            question_groups.add(group)
+        if group in question_groups:
+            raise AIAnalysisError("Perguntas sobre a mesma informação devem ser agrupadas.")
+        question_groups.add(group)
         covered.update(refs)
-        role_question |= question.sobre_papel
-    if covered != unknown_ids or (role.papel == "desconhecido" and not role_question):
+    if not unknown_ids - role_only_gaps <= covered:
         raise AIAnalysisError("Existem lacunas sem perguntas correspondentes.")
 
 
@@ -383,7 +383,9 @@ def calculate_adherence(analysis):
     else:
         outcome = Document.Outcome.GOOD_FIT
     return {
-        "score": _percentage(Decimal(met) + Decimal(partial) / Decimal(2), evaluated),
+        # A nota é da IA, que pondera requisitos, riscos e contexto do contrato;
+        # as contagens abaixo continuam vindo dos requisitos extraídos.
+        "score": analysis.score,
         "cobertura": _percentage(evaluated, total),
         "total": total, "avaliados": evaluated, "atendidos": met,
         "parcialmente_atendidos": partial, "nao_atendidos": unmet, "desconhecidos": unknown,
@@ -580,7 +582,7 @@ def merge_requirements_audit(analysis, audit):
             id_map[req_id] for req_id in question.requisito_ids if req_id in id_map
         ))
         requirement_ids = [req_id for req_id in requirement_ids if req_id in unknown_ids]
-        if not requirement_ids and not question.sobre_papel:
+        if not requirement_ids:
             continue
         group = (question.destino, question.fato_chave)
         existing = question_groups.get(group)

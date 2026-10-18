@@ -176,7 +176,6 @@ abstract final class MockAnalises {
             'pergunta': 'A empresa possui certificação ISO 27001?',
             'requisito_ids': ['req-3'],
             'fato_chave': 'iso_27001',
-            'sobre_papel': false,
             'destino': 'company_fact',
             'fato_rotulo': 'Possui certificação ISO 27001',
             'tipo_valor': 'booleano',
@@ -193,6 +192,10 @@ abstract final class MockAnalises {
         'desconhecidos': desconhecidos,
       },
       'outcome': boa ? 'good_fit' : (naoAtendidos > 0 ? 'incompatible' : 'insufficient_data'),
+      'score': score,
+      'justificativa_score': boa
+          ? 'A empresa atende aos requisitos obrigatórios e os riscos são controláveis.'
+          : 'Há requisitos obrigatórios sem resposta ou não atendidos e riscos relevantes.',
       'metadados': {
         'analisado_em': hoje.toUtc().toIso8601String(),
         'modelo': 'mock',

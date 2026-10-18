@@ -23,7 +23,6 @@ Exemplo de pergunta v2:
   "pergunta": "Sua empresa já possui certificação ISO 9001?",
   "requisito_ids": ["r1"],
   "fato_chave": "iso_9001",
-  "sobre_papel": false,
   "destino": "company_fact",
   "fato_rotulo": "Possui certificação ISO 9001",
   "tipo_valor": "booleano"
@@ -32,7 +31,7 @@ Exemplo de pergunta v2:
 
 O destino e a chave vêm da pergunta salva, nunca do body de confirmação. Chaves
 existentes são reutilizadas; fatos ausentes já recebem uma chave para sua criação.
-Perguntas `cadastro` e `papel` não podem ser respondidas por esses endpoints.
+Perguntas `cadastro` não podem ser respondidas por esses endpoints.
 
 ## 2. Gerar prévia sem alterar o perfil
 

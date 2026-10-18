@@ -32,8 +32,9 @@ mesmo quando o provedor não aplica alguma restrição do schema.
 | `obrigacoes` | Itens com `descricao`, `parte_responsavel`, `prazo_id`, `evidencia`. `prazo_id` é nulo ou referencia um item de `prazos`. |
 | `riscos` | Itens com `descricao`, `severidade` (`baixa`, `media`, `alta`, `critica`), `impacto`, `recomendacao`, `evidencia`. |
 | `requisitos` | Itens com `id`, `descricao`, `obrigatorio`, `resultado` (`atende`, `parcialmente_atende`, `nao_atende`, `desconhecido`), `depende_papel`, `justificativa`, `evidencia`, `referencias_perfil`. |
-| `perguntas_pendentes` | Itens com `id`, `pergunta`, `requisito_ids`, `fato_chave`, `sobre_papel`, `destino`, `fato_rotulo`, `tipo_valor`. |
-| `aderencia` | `score`, `cobertura`, `total`, `avaliados`, `atendidos`, `parcialmente_atendidos`, `nao_atendidos`, `desconhecidos`, calculados pelo backend. |
+| `perguntas_pendentes` | Itens com `id`, `pergunta`, `requisito_ids`, `fato_chave`, `destino`, `fato_rotulo`, `tipo_valor`. |
+| `score` / `justificativa_score` | Nota de 0 a 100 atribuída pela IA e a explicação dela. |
+| `aderencia` | `score` (cópia da nota da IA), `cobertura`, `total`, `avaliados`, `atendidos`, `parcialmente_atendidos`, `nao_atendidos`, `desconhecidos`; as contagens e a cobertura são calculadas pelo backend. |
 | `outcome` | Classificação calculada pelo backend. |
 | `metadados` | `analisado_em` (ISO com timezone), `modelo`, `contexto_empresa` (cópia exata do contexto enviado). |
 
@@ -80,18 +81,18 @@ Fatos preservam a origem (`user`, `cnpj_api`, `ai`) e sua confirmação individu
 Conclusões `atende`, `parcialmente_atende` ou `nao_atende` exigem referências existentes, não vazias e
 confirmadas, sem origem `ai`. O valor booleano `false` é preservado como dado
 explícito. Não confundir um fato ausente com uma negativa.
-Quando o requisito depende do papel da empresa, esse papel precisa estar resolvido.
+Quando o requisito depende do papel da empresa, esse papel precisa estar resolvido;
+se não estiver, o requisito fica `desconhecido`.
 Respostas que violam essas regras são rejeitadas antes da persistência.
 
-Todo requisito desconhecido precisa estar coberto por uma pergunta. Perguntas
-só podem referenciar requisitos desconhecidos. `destino` distingue `company_fact`,
-`cadastro` e `papel`. Para fatos, `fato_chave` existe mesmo antes de cadastrar o
+Todo requisito desconhecido precisa estar coberto por uma pergunta, exceto os que
+só dependem de um papel desconhecido: o papel da empresa não é perguntado ao usuário.
+Perguntas só podem referenciar requisitos desconhecidos. `destino` é `company_fact`
+ou `cadastro`. Para fatos, `fato_chave` existe mesmo antes de cadastrar o
 fato: usa snake_case ASCII com até 100 caracteres, sem colidir com campos de Company,
 autenticação ou papel. `fato_rotulo` é um texto não vazio com até 255 caracteres.
 `tipo_valor` é `booleano`, `inteiro`, `decimal`, `texto`, `data` ou `objeto`.
-Perguntas sobre a mesma chave devem ser agrupadas. Papel desconhecido exige uma pergunta
-`sobre_papel: true`, que pode também cobrir requisitos dependentes desse papel.
-Para destino `papel`, chave, rótulo e tipo são nulos. Para `cadastro`, a chave é
+Perguntas sobre a mesma chave devem ser agrupadas. Para `cadastro`, a chave é
 um campo do contexto cadastral, com rótulo e tipo nulos. Somente `company_fact`
 pode ser respondido pelo [fluxo de prévia e confirmação](answers.md).
 Os fatos só são gravados depois da confirmação explícita do usuário.
@@ -102,17 +103,18 @@ o resultado não é uma certificação automática de habilitação.
 
 ## Nota e classificação
 
-Todos os requisitos têm peso igual, incluindo os opcionais. Um requisito
-`parcialmente_atende` conta como meio requisito atendido:
-`score = 100 × (atendidos + 0,5 × parcialmente_atendidos) / avaliados`;
-`cobertura = 100 × avaliados / total`.
-Percentuais são arredondados ao inteiro mais próximo, com meio ponto para cima.
-Requisitos desconhecidos não entram na nota nem no denominador do score, mas
-reduzem a cobertura. Sem avaliados, score é `null`;
-sem requisitos, cobertura também é `null`.
+O score (0 a 100) é atribuído pela IA, que avalia o contexto inteiro do documento:
+atendimento dos requisitos (obrigatórios pesam mais que desejáveis), gravidade dos
+riscos, multas e garantias, viabilidade dos prazos e compatibilidade do porte, do
+ramo e da capacidade da empresa com o objeto e os valores. Faixas de referência
+passadas à IA: 80 a 100 compatível; 50 a 79 viável com negociação; 20 a 49 riscos
+altos ou lacunas importantes; 0 a 19 incompatível. A explicação fica em
+`justificativa_score`. O backend valida apenas que é um inteiro de 0 a 100.
 
-Exemplo: um requisito atendido, um parcialmente atendido, um não atendido e um
-desconhecido resultam em score `50`, cobertura `75`, total `4` e avaliados `3`.
+`cobertura = 100 × avaliados / total`, arredondada ao inteiro mais próximo, com meio
+ponto para cima; sem requisitos, é `null`. As contagens (`atendidos`,
+`parcialmente_atendidos`, `nao_atendidos`, `desconhecidos`) continuam vindo dos
+requisitos e não alteram a nota.
 
 Prioridade de classificação:
 
@@ -175,9 +177,9 @@ Credenciais nunca aparecem no contexto ou nos metadados.
 Conclusões `atende` ou `nao_atende` sem referências confirmadas suficientes, ou
 dependentes de um papel ainda desconhecido, são convertidas em `desconhecido`
 antes da validação. O backend preserva perguntas existentes ou cria uma pergunta
-pendente para o requisito. A obrigação escrita no contrato, por si só, não
-comprova atendimento. Esses requisitos ficam fora do cálculo da pontuação;
-sem requisitos avaliáveis, a pontuação é nula. Referências inexistentes ou
+pendente para o requisito, exceto quando a lacuna é só o papel da empresa. A obrigação escrita no contrato, por si só, não
+comprova atendimento. Esses requisitos deixam de contar como avaliados (a nota
+continua sendo a da IA). Referências inexistentes ou
 duplicadas e citações inválidas continuam sujeitas à validação estrita.
 Cada conversão gera um evento `conclusion_reconciled` no diagnóstico, quando
 a captura está habilitada, sem nova chamada à IA ou confirmação automática de fatos.

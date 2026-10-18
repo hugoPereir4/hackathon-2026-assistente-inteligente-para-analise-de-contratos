@@ -43,7 +43,7 @@ Veja como obter o token em [auth/docs/index.md](../../auth/docs/index.md).
 | `doc_type`               | string \| null    | Sim | `"contract"`, `"tender"` (edital) ou `"proposal"`. Opcional no upload. |
 | `filename`               | string            | Sim | Nome original do arquivo enviado. |
 | `status`                 | string            | Sim | `"uploaded"`, `"processing"`, `"ready"` ou `"failed"`. |
-| `score`                  | number \| null    | Sim | 0 a 100. `null` até ser analisado ou quando nenhum requisito pôde ser avaliado. |
+| `score`                  | number \| null    | Sim | 0 a 100, atribuído pela IA a partir do contexto do documento. `null` até ser analisado. |
 | `cobertura`              | number \| null    | Sim | 0 a 100: percentual dos requisitos que a IA conseguiu avaliar. |
 | `outcome`                | string \| null    | Sim | Ver [valores de `outcome`](#valores-de-outcome). |
 | `created_at`             | string (ISO 8601) | Sim | |
@@ -275,7 +275,6 @@ Requer `schema_version: 2` e `status: "ready"`.
   "pergunta": "Sua empresa já possui certificação ISO 9001?",
   "requisito_ids": ["r1"],
   "fato_chave": "iso_9001",
-  "sobre_papel": false,
   "destino": "company_fact",
   "fato_rotulo": "Possui certificação ISO 9001",
   "tipo_valor": "booleano"
@@ -286,7 +285,7 @@ Requer `schema_version: 2` e `status: "ready"`.
 | -------------- | ------------ |
 | `id`           | Enviado de volta em `pergunta_id`. |
 | `pergunta`     | Texto para exibir. |
-| `destino`      | Só `"company_fact"` pode ser respondido aqui. `"cadastro"` deve levar o usuário a editar a empresa ([company/docs/index.md](../../company/docs/index.md)); `"papel"` ainda não tem rota. |
+| `destino`      | Só `"company_fact"` pode ser respondido aqui. `"cadastro"` deve levar o usuário a editar a empresa ([company/docs/index.md](../../company/docs/index.md)). O papel da empresa nunca é perguntado. |
 | `tipo_valor`   | Dica para o campo de entrada: `booleano`, `inteiro`, `decimal`, `texto`, `data` ou `objeto`. A resposta é sempre enviada como texto livre. |
 
 ---

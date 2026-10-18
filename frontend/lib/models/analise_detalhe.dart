@@ -13,7 +13,8 @@ import 'analise_resumo.dart';
 /// obrigacoes[]           {descricao, parte_responsavel, prazo_id?, evidencia}
 /// riscos[]               {descricao, severidade, impacto, recomendacao, evidencia}
 /// requisitos[]           {id, descricao, obrigatorio, resultado, justificativa, evidencia, referencias_perfil}
-/// perguntas_pendentes[]  {id, pergunta, requisito_ids, fato_chave?, sobre_papel}
+/// perguntas_pendentes[]  {id, pergunta, requisito_ids, fato_chave?, destino}
+/// score                  nota de 0 a 100 dada pela IA (+ justificativa_score)
 /// aderencia              {score, cobertura, total, avaliados, atendidos, nao_atendidos, desconhecidos}
 /// outcome                good_fit | high_risk | incompatible | insufficient_data
 /// metadados              {analisado_em, modelo, contexto_empresa}
@@ -126,8 +127,10 @@ class AnaliseDetalhe {
       valores: _lista(analise['valores'], ValorFinanceiro.fromJson),
       requisitos: _lista(analise['requisitos'], Requisito.fromJson),
       obrigacoes: _lista(analise['obrigacoes'], Obrigacao.fromJson),
+      // O papel da empresa não é mais perguntado; análises antigas ainda
+      // podem trazer essa pergunta salva, então ela é descartada aqui.
       perguntas: _lista(analise['perguntas_pendentes'], PerguntaPendente.fromJson)
-          .where((p) => p.pergunta.isNotEmpty)
+          .where((p) => p.pergunta.isNotEmpty && !p.sobrePapel)
           .toList(),
       analisadoEm: DateTime.tryParse(metadados['analisado_em']?.toString() ?? '')?.toLocal(),
       modelo: _texto(metadados['modelo']),
@@ -391,12 +394,15 @@ class PerguntaPendente {
   final List<String> requisitoIds;
   final String? fatoChave;
 
-  /// v2: `company_fact` (fato da empresa), `cadastro` ou `papel`.
+  /// v2: `company_fact` (fato da empresa) ou `cadastro`.
   final String? destino;
   final String? fatoRotulo;
 
   /// v2: booleano, inteiro, decimal, texto, data ou objeto.
   final String? tipoValor;
+
+  /// Pergunta sobre o papel da empresa (contratante ou fornecedora), que só
+  /// existe em análises antigas. Não é exibida.
   final bool sobrePapel;
 
   const PerguntaPendente({
@@ -429,7 +435,7 @@ class PerguntaPendente {
         destino: _texto(json['destino']),
         fatoRotulo: _texto(json['fato_rotulo']),
         tipoValor: _texto(json['tipo_valor']),
-        sobrePapel: json['sobre_papel'] == true,
+        sobrePapel: json['sobre_papel'] == true || json['destino'] == 'papel',
       );
 }
 
