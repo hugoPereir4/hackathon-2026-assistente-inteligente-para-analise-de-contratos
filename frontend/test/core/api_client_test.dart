@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +6,7 @@ import 'package:hackathon_frontend/core/network/api_client.dart';
 import 'package:hackathon_frontend/core/network/api_exception.dart';
 import 'package:hackathon_frontend/core/network/token_storage.dart';
 import 'package:hackathon_frontend/models/auth_tokens.dart';
+import 'package:hackathon_frontend/services/api/api_documento_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -30,6 +32,57 @@ http.Response _json(Object body, int status) => http.Response(
     );
 
 void main() {
+  test('análise permite repetir falha usando o PDF já enviado', () async {
+    late http.Request recebido;
+    final api = ApiClient(
+      baseUrl: 'http://api.test',
+      tokenStorage: _MemoryTokenStorage(const AuthTokens(access: 'A1', refresh: 'R1')),
+      httpClient: MockClient((req) async {
+        recebido = req;
+        return _json({
+          'id': 2,
+          'filename': 'contrato.pdf',
+          'created_at': '2026-10-17T12:00:00Z',
+          'status': 'ready',
+        }, 200);
+      }),
+    );
+    final analise = await ApiDocumentoService(api).analisar('2');
+    expect(recebido.url.path, '/api/v1/documents/2/analyze/');
+    expect(jsonDecode(recebido.body), {'retry_failed': true});
+    expect(analise.concluida, isTrue);
+  });
+
+  test('timeout também cobre resposta cujo corpo não termina', () async {
+    final corpo = StreamController<List<int>>();
+    final api = ApiClient(
+      baseUrl: 'http://api.test',
+      tokenStorage: _MemoryTokenStorage(),
+      httpClient: MockClient.streaming((req, stream) async {
+        await stream.drain<void>();
+        return http.StreamedResponse(corpo.stream, 200);
+      }),
+    );
+    try {
+      await expectLater(
+        api.post(
+          'documents/1/analyze/',
+          auth: false,
+          timeout: const Duration(milliseconds: 20),
+        ),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.message,
+            'mensagem',
+            contains('demorou'),
+          ),
+        ),
+      );
+    } finally {
+      await corpo.close();
+    }
+  });
+
   test('monta a URL com /api/v1/ e envia o Bearer', () async {
     late http.Request recebido;
     final api = ApiClient(

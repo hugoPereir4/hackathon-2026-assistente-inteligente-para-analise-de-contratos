@@ -137,8 +137,11 @@ class ApiClient {
       if (access != null) request.headers['Authorization'] = 'Bearer $access';
     }
     try {
-      final streamed = await _http.send(request).timeout(timeout ?? AppConfig.requestTimeout);
-      return await http.Response.fromStream(streamed);
+      // O prazo inclui o corpo: receber os headers não garante que o upload
+      // e o processamento no servidor já terminaram.
+      return await _http.send(request)
+          .then(http.Response.fromStream)
+          .timeout(timeout ?? AppConfig.requestTimeout);
     } on TimeoutException {
       throw const ApiException('O servidor demorou para responder. Tente novamente.');
     } on http.ClientException {

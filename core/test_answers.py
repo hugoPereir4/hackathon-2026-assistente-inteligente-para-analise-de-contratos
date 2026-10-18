@@ -37,7 +37,7 @@ def provider_response(payload):
     return SimpleNamespace(text=json.dumps(payload))
 
 
-@override_settings(GOOGLE_AI_API_KEY="test-key", GOOGLE_AI_MODEL="test-model")
+@override_settings(GOOGLE_AI_API_KEY="test-key", GOOGLE_AI_MODEL="test-model", AI_DIAGNOSTICS_ENABLED=False)
 class AnswerFlowTests(APITransactionTestCase):
     def setUp(self):
         cache.clear()

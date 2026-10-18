@@ -18,6 +18,7 @@ db.sqlite3-journal
 *.log
 media/
 staticfiles/
+.diagnostics/
 
 # Variáveis de ambiente / segredos
 .env

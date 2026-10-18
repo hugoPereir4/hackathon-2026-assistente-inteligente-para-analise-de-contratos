@@ -74,11 +74,13 @@ class _DashboardViewState extends State<DashboardView> {
         );
         if (confirmou && mounted) await _analisar(analise);
       case StatusAnalise.erro:
-        await AdaptiveDialog.showMessage(
+        final repetir = await AdaptiveDialog.showConfirm(
           context,
           title: 'Análise com erro',
-          message: 'A análise deste documento falhou. Envie o arquivo novamente para tentar de novo.',
+          message: 'O documento já foi enviado. Deseja tentar a análise novamente?',
+          confirmLabel: 'Tentar novamente',
         );
+        if (repetir && mounted) await _analisar(analise);
       case StatusAnalise.processando:
         break;
     }

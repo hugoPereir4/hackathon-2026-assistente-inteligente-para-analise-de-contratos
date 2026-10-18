@@ -48,6 +48,8 @@ CORS_ALLOWED_ORIGINS = [
 # Configurações de APIs externas
 GOOGLE_AI_API_KEY = os.getenv("GOOGLE_AI_API_KEY")
 GOOGLE_AI_MODEL = (os.getenv("GOOGLE_AI_MODEL") or "").strip() or "gemini-3.5-flash-lite"
+AI_DIAGNOSTICS_ENABLED = os.getenv("AI_DIAGNOSTICS_ENABLED", str(DEBUG)).lower() in ("1", "true", "yes")
+AI_DIAGNOSTICS_DIR = BASE_DIR / ".diagnostics" / "analysis"
 
 # Application definition
 

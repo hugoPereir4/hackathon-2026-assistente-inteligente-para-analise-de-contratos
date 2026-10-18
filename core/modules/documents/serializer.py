@@ -7,6 +7,10 @@ from core.models import Document
 from core.modules.documents.service.document_service import create_document
 
 
+class DocumentAnalysisRequestSerializer(serializers.Serializer):
+    retry_failed = serializers.BooleanField(default=False)
+
+
 class DocumentSerializer(serializers.ModelSerializer):
     file = serializers.FileField(write_only=True)
     cobertura = serializers.SerializerMethodField()

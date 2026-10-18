@@ -19,6 +19,16 @@ class Evidence(Schema):
     clausula: Text | None
 
 
+class EvidenceCorrection(Schema):
+    caminho: Text
+    linha_inicio: Annotated[int, Field(ge=1)]
+    linha_fim: Annotated[int, Field(ge=1)]
+
+
+class EvidenceCorrections(Schema):
+    correcoes: list[EvidenceCorrection]
+
+
 class CompanyRole(Schema):
     papel: Literal["contratante", "fornecedora", "desconhecido"]
     justificativa: Text

@@ -18,6 +18,6 @@ abstract final class AppConfig {
 
   static const Duration requestTimeout = Duration(seconds: 30);
 
-  /// POST /documents/{id}/analyze/ é síncrono e o Gemini tem timeout de 60 s.
-  static const Duration analysisTimeout = Duration(seconds: 120);
+  /// Análise e eventual correção de citações podem fazer duas chamadas de 60 s.
+  static const Duration analysisTimeout = Duration(seconds: 150);
 }

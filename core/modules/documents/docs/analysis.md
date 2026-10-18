@@ -38,6 +38,15 @@ mesmo quando o provedor não aplica alguma restrição do schema.
 | `metadados` | `analisado_em` (ISO com timezone), `modelo`, `contexto_empresa` (cópia exata do contexto enviado). |
 
 `evidencia` contém `trecho` literal não vazio e `clausula` textual ou nula.
+O trecho deve ser contínuo e existir no texto extraído; espaços e quebras de
+linha são normalizados na comparação. Resumos, paráfrases e citações que unem
+passagens com reticências não são aceitos. Se uma geração falhar nessa validação,
+o serviço solicita uma única correção apenas das citações inválidas: a IA escolhe
+linhas numeradas, e o backend copia a passagem contínua diretamente do texto
+original. O schema restringe os caminhos permitidos e o intervalo de linhas;
+o backend também rejeita caminhos extras, duplicados, intervalos invertidos ou
+vazios. O resultado completo é validado novamente antes de salvar. Os logs registram os caminhos
+dos campos inválidos, sem registrar o conteúdo do contrato.
 O trecho precisa existir no texto extraído, com normalização apenas de espaços.
 Não há números de página, pois a extração atual não preserva essa informação.
 Datas explícitas usam `YYYY-MM-DD`. Prazos relativos mantêm `data: null` quando
@@ -108,7 +117,8 @@ permanecem legíveis. Para responder perguntas antigas, reavalie pelo endpoint
 A análise é síncrona: `uploaded → processing → ready`.
 O primeiro pedido adquire o documento com UPDATE condicional atômico.
 Outro pedido para o mesmo documento não chama o provedor e recebe `409`.
-Não há fila nem retry automático. O endpoint `reanalyze` permite repetir uma
+Não há fila nem repetição automática da análise completa. Há no máximo uma
+chamada adicional para corrigir evidências inválidas. O endpoint `reanalyze` permite repetir uma
 análise existente em estado `ready` ou `failed`; `processing` continua bloqueado.
 
 No serviço Python, uma falha pode ser repetida explicitamente:
@@ -118,9 +128,11 @@ analyze_document_with_ai(document, retry_failed=True)
 ```
 
 Essa opção permite `failed → processing`, mantendo o UPDATE condicional atômico.
-Não libera documentos `ready` nem `processing`. O endpoint `analyze` continua sem
-retry: para um documento com falha, retorna `409`. Use `reanalyze` quando houver
-um resultado anterior. Reinicie o shell Django antes
+Não libera documentos `ready` nem `processing`. No endpoint `analyze`, envie
+`{"retry_failed": true}` para repetir explicitamente um documento com falha sem
+reenviar o PDF. Sem esse campo, uma falha continua retornando `409`. O frontend
+oferece essa opção ao clicar em um documento com estado "Falhou".
+Use `reanalyze` quando houver um resultado anterior. Reinicie o shell Django antes
 de importar a nova versão da função. A análise real envia o contexto e o texto ao
 Gemini; uma nova tentativa pode consumir a quota do projeto.
 
@@ -142,6 +154,34 @@ permissão), 404 (modelo), 429 (quota), timeout e falha de conexão. A causa ori
 continua encadeada para diagnóstico no shell. O banco não armazena o histórico
 dos erros anteriores; `failed` sozinho não permite recuperar sua causa.
 Credenciais nunca aparecem no contexto ou nos metadados.
+
+### Diagnóstico reproduzível
+
+Com `DEBUG=True`, `AI_DIAGNOSTICS_ENABLED` fica habilitado por padrão. Cada análise
+grava um JSON em `.diagnostics/analysis/` com ID, horário, versão do serviço (SHA-256),
+prompt, modelo, schema, dados enviados, respostas e etapas de validação. Uma falha
+de gravação não interrompe a análise. A API devolve o código de suporte na mensagem
+de erro para localizar o arquivo. Para desabilitar, use `AI_DIAGNOSTICS_ENABLED=False`.
+
+Os arquivos contêm o contrato e dados do perfil: são locais, ignorados pelo Git e
+não são servidos pela API nem por MEDIA_URL. Não incluem chave da API ou headers.
+Fora de DEBUG, a captura vem desabilitada por padrão e exige habilitação explícita
+com `AI_DIAGNOSTICS_ENABLED=True`.
+
+```powershell
+# Executa sem alterar banco ou status (chama o Gemini e consome quota):
+.\.venv\Scripts\python.exe manage.py debug_analysis --document 4
+
+# Repete as validações de uma captura, sem rede e sem nova geração:
+.\.venv\Scripts\python.exe manage.py debug_analysis --replay .diagnostics/analysis/ID.json
+
+# Testa somente a correção sobre a resposta original capturada (chama o Gemini):
+.\.venv\Scripts\python.exe manage.py debug_analysis --repair-from .diagnostics/analysis/ID.json
+```
+
+`--replay` verifica os caminhos devolvidos pela correção e reexecuta as validações
+capturadas usando o código atual. `--repair-from` usa a primeira resposta capturada
+como entrada fixa e gera um novo registro; não substitui a análise no banco.
 
 PDF continua sendo o único formato aceito. OCR, DOCX, chat e respostas sobre o papel
 da empresa no documento ficam para etapas futuras. Alterações cadastrais continuam

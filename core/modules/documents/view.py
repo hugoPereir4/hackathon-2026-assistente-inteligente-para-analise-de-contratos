@@ -5,7 +5,9 @@ from uuid import UUID
 from core.classes.base_viewset import BaseModelViewSet
 from core.classes.permission import CustomPermissionClass
 from core.models import Document
-from core.modules.documents.serializer import DocumentDetailSerializer, DocumentSerializer
+from core.modules.documents.serializer import (
+    DocumentAnalysisRequestSerializer, DocumentDetailSerializer, DocumentSerializer,
+)
 from core.modules.documents.service import delete_document
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -45,9 +47,13 @@ class DocumentViewSet(BaseModelViewSet):
     @action(detail=True, methods=["post"])
     def analyze(self, request, pk=None):
         document = self.get_object()
+        options = DocumentAnalysisRequestSerializer(data=request.data)
+        options.is_valid(raise_exception=True)
 
         try:
-            analyze_document_with_ai(document)
+            analyze_document_with_ai(
+                document, retry_failed=options.validated_data["retry_failed"],
+            )
             return Response(
                 self.get_serializer(document).data,
                 status=status.HTTP_200_OK,
@@ -58,9 +64,18 @@ class DocumentViewSet(BaseModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except AIAnalysisError as e:
             return Response(
-                {"error": str(e)},
+                self._error_payload(e),
                 status=status.HTTP_502_BAD_GATEWAY,
             )
+
+    @staticmethod
+    def _error_payload(exc):
+        payload = {"error": str(exc)}
+        diagnostic_id = getattr(exc, "diagnostic_id", None)
+        if diagnostic_id:
+            payload["diagnostic_id"] = diagnostic_id
+            payload["error"] += f" Código para suporte: {diagnostic_id}."
+        return payload
 
     @staticmethod
     def _flow_error(exc):
@@ -70,7 +85,7 @@ class DocumentViewSet(BaseModelViewSet):
             code = status.HTTP_400_BAD_REQUEST
         else:
             code = status.HTTP_502_BAD_GATEWAY
-        return Response({"error": str(exc)}, status=code)
+        return Response(DocumentViewSet._error_payload(exc), status=code)
 
     @action(detail=True, methods=["post"], url_path="answers/preview")
     def answers_preview(self, request, pk=None):

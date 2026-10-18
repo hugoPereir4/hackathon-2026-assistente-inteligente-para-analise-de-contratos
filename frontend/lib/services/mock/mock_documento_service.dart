@@ -61,7 +61,7 @@ class MockDocumentoService implements DocumentoService {
   @override
   Future<AnaliseResumo> analisar(String id) async {
     final documento = _documento(id);
-    if (documento['status'] != 'uploaded') {
+    if (documento['status'] != 'uploaded' && documento['status'] != 'failed') {
       throw const ApiException(
         'O documento já foi analisado, está em processamento ou não existe.',
         statusCode: 409,

@@ -41,7 +41,11 @@ class ApiDocumentoService implements DocumentoService {
 
   @override
   Future<AnaliseResumo> analisar(String id) async {
-    final json = await _api.post('documents/$id/analyze/', timeout: AppConfig.analysisTimeout);
+    final json = await _api.post(
+      'documents/$id/analyze/',
+      body: {'retry_failed': true},
+      timeout: AppConfig.analysisTimeout,
+    );
     return AnaliseResumo.fromJson(json as Map<String, dynamic>);
   }
 

@@ -39,19 +39,30 @@ class DashboardController extends BaseController {
   bool carregandoRecentes = false;
   bool arrastandoArquivo = false;
   String? arquivoEmEnvio;
+  bool _preparandoArquivo = false;
   Timer? _polling;
   DateTime? _pollingIniciadoEm;
   bool _atualizando = false;
   String? erroAoCarregar;
 
-  bool get enviando => arquivoEmEnvio != null;
+  bool get enviando => _preparandoArquivo || arquivoEmEnvio != null;
 
   Future<void> carregarRecentes() async {
+    final idsAntesDaConsulta = _recentes.map((a) => a.id).toSet();
     carregandoRecentes = true;
     erroAoCarregar = null;
     notify();
     try {
-      _recentes = await _documentoService.listarRecentes();
+      final recebidas = await _documentoService.listarRecentes();
+      // Uma resposta iniciada antes do upload pode ainda não conter o novo PDF.
+      final enviadasDuranteConsulta = _recentes
+          .where((a) => !idsAntesDaConsulta.contains(a.id))
+          .toList();
+      final idsNovos = enviadasDuranteConsulta.map((a) => a.id).toSet();
+      _recentes = [
+        ...enviadasDuranteConsulta,
+        ...recebidas.where((a) => !idsNovos.contains(a.id)),
+      ];
       _iniciarPollingSeNecessario();
     } on ApiException catch (e) {
       erroAoCarregar = e.message;
@@ -72,30 +83,44 @@ class DashboardController extends BaseController {
   /// Abre o seletor de arquivos e envia. Retorna o documento criado, ou
   /// `null` se o usuário cancelou ou houve erro (veja [errorMessage]).
   Future<AnaliseResumo?> selecionarArquivo() async {
-    if (enviando) return null;
-    final ArquivoSelecionado? arquivo;
-    try {
-      arquivo = await _seletorArquivo.selecionarDocumento();
-    } catch (_) {
-      setError('Não foi possível abrir o seletor de arquivos.');
-      return null;
-    }
-    if (arquivo == null) return null; // usuário cancelou
-    return _enviar(arquivo);
+    return _prepararEEnviar(
+      _seletorArquivo.selecionarDocumento,
+      'Não foi possível abrir o seletor de arquivos.',
+    );
   }
 
   /// Recebe arquivos soltos na zona de upload (web/desktop). Usa só o primeiro.
   Future<AnaliseResumo?> receberArquivosArrastados(List<XFile> arquivos) async {
     definirArrastando(false);
     if (enviando || arquivos.isEmpty) return null;
-    final ArquivoSelecionado arquivo;
+    return _prepararEEnviar(
+      () => _seletorArquivo.deXFile(arquivos.first),
+      'Não foi possível ler o arquivo arrastado.',
+    );
+  }
+
+  Future<AnaliseResumo?> _prepararEEnviar(
+    Future<ArquivoSelecionado?> Function() obterArquivo,
+    String erroDeLeitura,
+  ) async {
+    if (enviando) return null;
+    // Bloqueia antes do primeiro await: seleção e leitura também são assíncronas.
+    _preparandoArquivo = true;
+    clearError();
     try {
-      arquivo = await _seletorArquivo.deXFile(arquivos.first);
-    } catch (_) {
-      setError('Não foi possível ler o arquivo arrastado.');
-      return null;
+      final ArquivoSelecionado? arquivo;
+      try {
+        arquivo = await obterArquivo();
+      } catch (_) {
+        setError(erroDeLeitura);
+        return null;
+      }
+      if (arquivo == null) return null;
+      return await _enviar(arquivo);
+    } finally {
+      _preparandoArquivo = false;
+      notify();
     }
-    return _enviar(arquivo);
   }
 
   Future<AnaliseResumo?> _enviar(ArquivoSelecionado arquivo) async {

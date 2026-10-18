@@ -52,7 +52,7 @@ def parse(payload):
     return DocumentAnalysis.model_validate_json(json.dumps(payload))
 
 
-@override_settings(GOOGLE_AI_API_KEY="test-key", GOOGLE_AI_MODEL="test-model")
+@override_settings(GOOGLE_AI_API_KEY="test-key", GOOGLE_AI_MODEL="test-model", AI_DIAGNOSTICS_ENABLED=False)
 class AnalysisTests(APITestCase):
     def setUp(self):
         cache.clear()
@@ -251,6 +251,133 @@ class AnalysisTests(APITestCase):
                 self.assertEqual(doc.status, "failed")
                 self.assertIsNone(doc.analysis_json)
                 self.assertIsNone(doc.score)
+
+    def test_abbreviated_evidence_is_repaired_once_without_changing_conclusions(self):
+        self.document.text_content = "A empresa Exemplo é fornecedora.\nExige-se ISO 9001.\nMulta de 10%."
+        self.document.save(update_fields=["text_content"])
+        payload = answer()
+        payload["requisitos"][0]["evidencia"]["trecho"] = "Exige-se... ISO 9001."
+        payload["papel_empresa"]["evidencia"]["trecho"] = "A empresa Exemplo... fornecedora."
+        self.generate.side_effect = [
+            SimpleNamespace(text=json.dumps(payload)),
+            SimpleNamespace(text=json.dumps({"correcoes": [
+                {"caminho": "requisitos[0].evidencia", "linha_inicio": 2, "linha_fim": 2},
+                {"caminho": "papel_empresa.evidencia", "linha_inicio": 1, "linha_fim": 1},
+            ]})),
+        ]
+        with self.assertLogs("core.modules.documents.service.ai_service", level="WARNING") as logs:
+            response = self.post()
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self.generate.call_count, 2)
+        saved = response.data["analysis_json"]
+        for field, value in answer().items():
+            self.assertEqual(saved[field], value)
+        request = json.loads(self.generate.call_args.kwargs["contents"])
+        self.assertEqual(request["linhas_documento"][1], {"numero": 2, "texto": EVIDENCE["trecho"]})
+        schema = self.generate.call_args.kwargs["config"].response_json_schema
+        properties = schema["$defs"]["EvidenceCorrection"]["properties"]
+        self.assertEqual(properties["linha_fim"]["maximum"], 3)
+        self.assertEqual(set(properties["caminho"]["enum"]), {
+            "requisitos[0].evidencia", "papel_empresa.evidencia",
+        })
+        self.assertEqual({item["caminho"] for item in request["itens"]}, {
+            "requisitos[0].evidencia", "papel_empresa.evidencia",
+        })
+        self.assertIn("requisitos[0].evidencia", str(logs.output))
+        self.assertNotIn("Exige-se...", str(logs.output))
+
+    def test_repair_cannot_accept_invented_evidence_or_loop(self):
+        payload = answer()
+        payload["requisitos"][0]["evidencia"]["trecho"] = "Exige-se... ISO 9001."
+        self.generate.side_effect = [
+            SimpleNamespace(text=json.dumps(payload)),
+            SimpleNamespace(text=json.dumps({"correcoes": [
+                {"caminho": "requisitos[0].evidencia", "trecho": "Exige-se ISO 27001."},
+            ]})),
+        ]
+        response = self.post()
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("formato esperado", response.data["error"])
+        self.assertEqual(self.generate.call_count, 2)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, "failed")
+        self.assertIsNone(self.document.analysis_json)
+
+    def test_repair_requires_exactly_the_invalid_paths(self):
+        cases = [[], [
+            {"caminho": "riscos[0].evidencia", "linha_inicio": 1, "linha_fim": 1},
+        ], [
+            {"caminho": "requisitos[0].evidencia", "linha_inicio": 1, "linha_fim": 1},
+            {"caminho": "requisitos[0].evidencia", "linha_inicio": 1, "linha_fim": 1},
+        ], [
+            {"caminho": "requisitos[0].evidencia.trecho", "linha_inicio": 1, "linha_fim": 1},
+        ]]
+        for corrections in cases:
+            with self.subTest(corrections=corrections):
+                payload = answer()
+                payload["requisitos"][0]["evidencia"]["trecho"] = "Exige-se... ISO 9001."
+                self.generate.side_effect = [
+                    SimpleNamespace(text=json.dumps(payload)),
+                    SimpleNamespace(text=json.dumps({"correcoes": corrections})),
+                ]
+                document = self.new_document()
+                response = self.post(document)
+                self.assertEqual(response.status_code, 502)
+                document.refresh_from_db()
+                self.assertIsNone(document.analysis_json)
+
+    def test_repair_copies_original_newlines_quotes_and_hyphenation(self):
+        from core.modules.documents.service.ai_service import _repair_analysis_evidence
+        source = 'Condições:\r\nA fornecedora "Exemplo" deve imple-\r\nmentar a integração.\r\nFim.'
+        analysis = parse(answer())
+        self.respond({"correcoes": [{
+            "caminho": "requisitos[0].evidencia", "linha_inicio": 2, "linha_fim": 3,
+        }]})
+        repaired = _repair_analysis_evidence(analysis, source, ["requisitos[0].evidencia"])
+        quote = repaired.requisitos[0].evidencia.trecho
+        self.assertEqual(quote, 'A fornecedora "Exemplo" deve imple-\r\nmentar a integração.')
+        self.assertIn(quote, source)
+        self.assertEqual(analysis.requisitos[0].evidencia.trecho, EVIDENCE["trecho"])
+
+    def test_repair_rejects_invalid_or_empty_line_ranges(self):
+        from core.modules.documents.service.ai_service import _repair_analysis_evidence
+        for start, end in [(0, 1), (1, 99), (3, 2), (2, 2)]:
+            with self.subTest(start=start, end=end):
+                self.respond({"correcoes": [{
+                    "caminho": "requisitos[0].evidencia", "linha_inicio": start, "linha_fim": end,
+                }]})
+                with self.assertRaises(AIAnalysisError):
+                    _repair_analysis_evidence(parse(answer()), 'Texto.\n\nFim.', ["requisitos[0].evidencia"])
+
+    def test_repair_provider_failure_does_not_persist_partial_analysis(self):
+        payload = answer()
+        payload["requisitos"][0]["evidencia"]["trecho"] = "Exige-se... ISO 9001."
+        self.generate.side_effect = [SimpleNamespace(text=json.dumps(payload)), TimeoutError()]
+        self.assertEqual(self.post().status_code, 502)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, "failed")
+        self.assertIsNone(self.document.analysis_json)
+
+    def test_api_retry_failed_requires_explicit_flag_and_still_blocks_processing(self):
+        self.document.status = "failed"
+        self.document.save(update_fields=["status"])
+        self.assertEqual(self.post().status_code, 409)
+        self.generate.assert_not_called()
+        url = f"/api/v1/documents/{self.document.pk}/analyze/"
+        response = self.client.post(url, {"retry_failed": True}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self.generate.call_count, 1)
+        self.assertEqual(self.client.post(url, {"retry_failed": True}, format="json").status_code, 409)
+        self.document.status = "processing"
+        self.document.save(update_fields=["status"])
+        self.assertEqual(self.client.post(url, {"retry_failed": True}, format="json").status_code, 409)
+        self.assertEqual(self.generate.call_count, 1)
+
+    def test_api_retry_failed_rejects_invalid_flag(self):
+        url = f"/api/v1/documents/{self.document.pk}/analyze/"
+        response = self.client.post(url, {"retry_failed": "maybe"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.generate.assert_not_called()
 
     def test_references_and_questions_must_be_consistent(self):
         variants = []
