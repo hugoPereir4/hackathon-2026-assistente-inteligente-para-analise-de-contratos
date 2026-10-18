@@ -11,7 +11,7 @@ import 'core/theme/app_theme.dart';
 /// Sem `initialRoute`: na web a rota inicial vem da URL (ex.: /#/cadastro);
 /// no mobile é sempre '/', que o [AppRouter] resolve para o login.
 class App extends StatelessWidget {
-  static const String title = 'Análise de Contratos';
+  static const String title = 'ContratAI';
   static const AppRouter _router = AppRouter();
   static const Locale _locale = Locale('pt', 'BR');
   static const List<LocalizationsDelegate<dynamic>> _localizations = [

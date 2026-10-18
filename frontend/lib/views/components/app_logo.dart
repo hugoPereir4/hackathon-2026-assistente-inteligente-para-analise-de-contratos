@@ -2,11 +2,11 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/theme/app_colors.dart';
 
-/// Logo em texto do app. Enquanto não há nome definido, mostra "nome app".
+/// Logo em texto do app: "Contrat" + "AI" em destaque.
 /// Quando o logo existir, troque o conteúdo deste widget por um Image.asset.
 class AppLogo extends StatelessWidget {
-  static const String nome = 'nome';
-  static const String sufixo = 'app';
+  static const String nome = 'Contrat';
+  static const String sufixo = 'AI';
 
   final double fontSize;
 
@@ -23,7 +23,7 @@ class AppLogo extends StatelessWidget {
     return Text.rich(
       TextSpan(
         children: [
-          TextSpan(text: '$nome ', style: base.copyWith(color: AppColors.primary)),
+          TextSpan(text: nome, style: base.copyWith(color: AppColors.primary)),
           TextSpan(text: sufixo, style: base.copyWith(color: AppColors.primaryLight)),
         ],
       ),
