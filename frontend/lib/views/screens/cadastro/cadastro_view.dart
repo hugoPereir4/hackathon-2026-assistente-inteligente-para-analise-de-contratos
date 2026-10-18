@@ -43,10 +43,8 @@ class _CadastroViewState extends State<CadastroView> {
       }
       return;
     }
-    // Se o PATCH do perfil falhou no backend, a conta existe mas não está
-    // confirmada: segue para a tela de confirmação.
     Navigator.of(context).pushNamedAndRemoveUntil(
-      usuario.primeiroAcesso ? AppRoutes.confirmarEmpresa : AppRoutes.dashboard,
+      AppRoutes.dashboard,
       (_) => false,
       arguments: usuario,
     );

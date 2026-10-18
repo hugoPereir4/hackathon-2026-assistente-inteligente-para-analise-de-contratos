@@ -8,10 +8,10 @@ import '../auth_service.dart';
 /// Autenticação pela API Django (SimpleJWT).
 ///
 ///   POST /auth/login/     {login, password}         -> {access, refresh}
-///   POST /auth/register/  {email, password, cnpj}   -> {user, access, refresh}
+///   POST /auth/register/  {email, password, cnpj, legal_name, ...} -> {user, access, refresh}
 ///   POST /auth/logout/    {refresh}
 ///   GET   /companies/me/  -> empresa logada
-///   PATCH /companies/me/  -> perfil + confirmed
+///   PATCH /companies/me/  {confirmed: true}
 class ApiAuthService implements AuthService {
   final ApiClient _api;
 
@@ -33,18 +33,14 @@ class ApiAuthService implements AuthService {
     final json = await _api.post('auth/register/', body: conta.toRegisterJson(), auth: false)
         as Map<String, dynamic>;
     await _api.salvarTokens(AuthTokens.fromJson(json));
-    final user = json['user'] as Map<String, dynamic>;
-    // O register devolve só id, email e cnpj; `confirmed` começa false.
-    final criado = Usuario.fromJson({'confirmed': false, ...user});
+    final criado = Usuario.fromJson(json['user'] as Map<String, dynamic>);
+    if (criado.confirmado) return criado;
 
-    // O register não aceita os dados da empresa; eles vão num PATCH.
-    // Se o PATCH falhar a conta já existe: devolve sem confirmar, e o
-    // usuário completa na tela de confirmação.
+    // A IA só usa dados da empresa com `confirmed: true`, e o register ainda
+    // não aceita esse campo: marca num PATCH. Os dados já foram salvos no
+    // register; se o PATCH falhar, segue para o dashboard mesmo assim.
     try {
-      final atualizado = await _api.patch(
-        'companies/me/',
-        body: {...conta.empresa.toPerfilJson(), 'confirmed': true},
-      );
+      final atualizado = await _api.patch('companies/me/', body: {'confirmed': true});
       return Usuario.fromJson(atualizado as Map<String, dynamic>);
     } on ApiException {
       return criado;

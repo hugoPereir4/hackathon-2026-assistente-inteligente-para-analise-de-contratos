@@ -58,7 +58,7 @@ class MockAuthService implements AuthService {
       senha: conta.senha,
       legalName: conta.empresa.razaoSocial,
     );
-    // Igual à versão da API: cadastro + PATCH do perfil já confirmado.
+    // Igual à versão da API: register com o perfil + PATCH do confirmed.
     company
       ..addAll(conta.empresa.toPerfilJson())
       ..['confirmed'] = true;

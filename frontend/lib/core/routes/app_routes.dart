@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../models/analise_resumo.dart';
 import '../../models/usuario.dart';
 import '../../views/screens/cadastro/cadastro_view.dart';
-import '../../views/screens/confirmar_empresa/confirmar_empresa_view.dart';
 import '../../views/screens/dashboard/dashboard_view.dart';
 import '../../views/screens/login/login_view.dart';
 import '../../views/screens/resultado/resultado_view.dart';
@@ -14,7 +13,6 @@ import '../platform/app_platform.dart';
 abstract final class AppRoutes {
   static const String login = '/';
   static const String cadastro = '/cadastro';
-  static const String confirmarEmpresa = '/confirmar-empresa';
   static const String dashboard = '/dashboard';
   static const String resultado = '/resultado';
 }
@@ -32,7 +30,6 @@ class AppRouter {
 
     final Widget page = switch (settings.name) {
       AppRoutes.cadastro => const CadastroView(),
-      AppRoutes.confirmarEmpresa when usuario != null => ConfirmarEmpresaView(usuario: usuario),
       AppRoutes.dashboard when usuario != null => DashboardView(usuario: usuario),
       AppRoutes.resultado when analise != null => ResultadoView(analise: analise),
       _ => const LoginView(),

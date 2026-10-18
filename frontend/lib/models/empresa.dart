@@ -45,18 +45,4 @@ class Empresa {
       };
 
   Map<String, dynamic> toJson() => {'cnpj': cnpj, ...toPerfilJson()};
-
-  /// Completa os campos vazios com os de [outra] (ex.: dados da API de CNPJ)
-  /// sem sobrescrever o que o usuário já tinha salvo.
-  Empresa completarCom(Empresa outra) {
-    return Empresa(
-      cnpj: cnpj,
-      razaoSocial: razaoSocial ?? outra.razaoSocial,
-      cnae: cnae ?? outra.cnae,
-      porte: porte ?? outra.porte,
-      dataFundacao: dataFundacao ?? outra.dataFundacao,
-      cidade: cidade ?? outra.cidade,
-      uf: uf ?? outra.uf,
-    );
-  }
 }

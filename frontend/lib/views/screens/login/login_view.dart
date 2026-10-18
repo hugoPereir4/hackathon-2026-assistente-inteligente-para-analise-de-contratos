@@ -39,8 +39,7 @@ class _LoginViewState extends State<LoginView> {
       return;
     }
 
-    final rota = usuario.primeiroAcesso ? AppRoutes.confirmarEmpresa : AppRoutes.dashboard;
-    Navigator.of(context).pushReplacementNamed(rota, arguments: usuario);
+    Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard, arguments: usuario);
   }
 
   void _criarConta() => Navigator.of(context).pushNamed(AppRoutes.cadastro);

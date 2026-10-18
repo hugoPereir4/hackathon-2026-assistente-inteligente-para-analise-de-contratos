@@ -9,11 +9,15 @@ class NovaConta {
 
   const NovaConta({required this.email, required this.senha, required this.empresa});
 
-  /// Corpo de POST /auth/register/. O RegisterSerializer só aceita estes
-  /// campos; o perfil da empresa vai depois num PATCH /companies/me/.
+  /// Corpo de POST /auth/register/: acesso + dados da empresa vindos da
+  /// consulta de CNPJ (campos vazios ficam de fora).
+  ///
+  /// `confirmed` ainda não é aceito pelo RegisterSerializer (o backend ignora);
+  /// vai junto para valer assim que for, sem mudar o app.
   Map<String, dynamic> toRegisterJson() => {
         'email': email,
         'password': senha,
-        'cnpj': empresa.cnpj,
+        ...empresa.toJson()..removeWhere((_, valor) => valor == null),
+        'confirmed': true,
       };
 }

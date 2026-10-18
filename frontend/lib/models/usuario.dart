@@ -17,9 +17,6 @@ class Usuario {
     this.razaoSocial,
   });
 
-  /// Primeiro acesso = dados da empresa ainda não confirmados.
-  bool get primeiroAcesso => !confirmado;
-
   String get nomeExibicao => razaoSocial ?? email;
 
   factory Usuario.fromJson(Map<String, dynamic> json) {

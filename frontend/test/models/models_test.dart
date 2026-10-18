@@ -17,7 +17,7 @@ void main() {
       'created_at': '2026-10-17T12:00:00Z',
     });
     expect(u.id, 7);
-    expect(u.primeiroAcesso, isTrue);
+    expect(u.confirmado, isFalse);
   });
 
   test('Empresa lê a consulta de CNPJ (GET /companies/{cnpj}/)', () {
@@ -46,13 +46,20 @@ void main() {
     expect(PorteEmpresa.fromCodigo(null), isNull);
   });
 
-  test('NovaConta envia ao register só os campos aceitos', () {
+  test('NovaConta envia ao register a empresa junto, sem campos vazios', () {
     const conta = NovaConta(
       email: 'ana@empresa.com',
       senha: 'senhaForte1',
       empresa: Empresa(cnpj: '11222333000181', razaoSocial: 'ACME', cidade: 'Rio'),
     );
-    expect(conta.toRegisterJson().keys, ['email', 'password', 'cnpj']);
+    expect(conta.toRegisterJson(), {
+      'email': 'ana@empresa.com',
+      'password': 'senhaForte1',
+      'cnpj': '11222333000181',
+      'legal_name': 'ACME',
+      'address_city': 'Rio',
+      'confirmed': true,
+    });
   });
 
   test('Empresa.toPerfilJson usa as colunas do banco e não manda o CNPJ', () {
