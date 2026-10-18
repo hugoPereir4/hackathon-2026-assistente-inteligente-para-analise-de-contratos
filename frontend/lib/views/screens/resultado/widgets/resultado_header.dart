@@ -7,8 +7,11 @@ import '../../../../models/analise_resumo.dart';
 import '../../../components/components.dart';
 import '../../../shared/match_style.dart';
 
-/// Topo do painel: medidor de compatibilidade, selo do resultado,
-/// veredito, números da aderência, papel da empresa e dados do arquivo.
+/// Topo do painel: arquivo analisado e, abaixo, o medidor de compatibilidade
+/// com o selo do resultado, o veredito e os números da aderência.
+///
+/// Lado a lado quando há espaço (tablet/desktop); empilhado e centralizado
+/// no celular.
 class ResultadoHeader extends StatelessWidget {
   static const double _larguraLado = 520;
 
@@ -28,32 +31,92 @@ class ResultadoHeader extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final ladoALado = constraints.maxWidth >= _larguraLado;
-          final info = _info(centralizado: !ladoALado);
-          if (ladoALado) {
-            return Row(children: [gauge, const SizedBox(width: 28), Expanded(child: info)]);
-          }
-          return Column(children: [gauge, const SizedBox(height: 20), info]);
+          final centralizado = !ladoALado;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Arquivo(analise: analise, papel: papel, centralizado: centralizado),
+              const SizedBox(height: 16),
+              Container(height: 1, color: AppColors.border.withValues(alpha: 0.6)),
+              const SizedBox(height: 20),
+              if (ladoALado)
+                Row(
+                  children: [
+                    gauge,
+                    const SizedBox(width: 28),
+                    Expanded(child: _Compatibilidade(analise: analise, aderencia: aderencia)),
+                  ],
+                )
+              else ...[
+                Center(child: gauge),
+                const SizedBox(height: 20),
+                _Compatibilidade(analise: analise, aderencia: aderencia, centralizado: true),
+              ],
+            ],
+          );
         },
       ),
     );
   }
+}
 
-  Widget _info({required bool centralizado}) {
+/// Nome do arquivo + "Contrato • Fornecedora (CONTRATADA) • Enviado em 12/10/2026".
+class _Arquivo extends StatelessWidget {
+  final AnaliseResumo analise;
+  final PapelEmpresa? papel;
+  final bool centralizado;
+
+  const _Arquivo({required this.analise, required this.papel, required this.centralizado});
+
+  @override
+  Widget build(BuildContext context) {
     final alinhamento = centralizado ? TextAlign.center : TextAlign.start;
-    final eixo = centralizado ? CrossAxisAlignment.center : CrossAxisAlignment.start;
-    final resultado = analise.resultado;
     final detalhes = [
       if (analise.categoria != null) analise.categoria!,
+      if (papel?.parteNoContrato != null) '${papel!.rotulo} (${papel!.parteNoContrato})',
       'Enviado em ${Formatters.data(analise.enviadoEm)}',
     ].join(' • ');
 
     return Column(
-      crossAxisAlignment: eixo,
+      crossAxisAlignment: centralizado ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
         Text(
-          'COMPATIBILIDADE COM O PERFIL',
+          analise.nomeArquivo,
           textAlign: alinhamento,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            height: 1.3,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        AppText.caption(detalhes, textAlign: alinhamento),
+      ],
+    );
+  }
+}
+
+/// Selo do resultado, veredito e "3 atendidos · 2 não atendidos".
+class _Compatibilidade extends StatelessWidget {
+  final AnaliseResumo analise;
+  final Aderencia? aderencia;
+  final bool centralizado;
+
+  const _Compatibilidade({required this.analise, this.aderencia, this.centralizado = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final resultado = analise.resultado;
+    final a = aderencia;
+    return Column(
+      crossAxisAlignment: centralizado ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'COMPATIBILIDADE COM O PERFIL',
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
             letterSpacing: 1,
@@ -70,80 +133,28 @@ class ResultadoHeader extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           MatchStyle.veredito(resultado: resultado, score: analise.matchScore),
-          textAlign: alinhamento,
+          textAlign: centralizado ? TextAlign.center : TextAlign.start,
           style: const TextStyle(fontSize: 16, height: 1.4, color: AppColors.textPrimary),
         ),
-        if (aderencia != null && aderencia!.total > 0) ...[
+        if (a != null && a.total > 0) ...[
           const SizedBox(height: 14),
-          _Numeros(aderencia: aderencia!, centralizado: centralizado),
-        ],
-        const SizedBox(height: 16),
-        if (papel?.parteNoContrato != null) ...[
-          Text.rich(
-            TextSpan(
-              children: [
-                const TextSpan(text: 'Sua empresa: '),
-                TextSpan(
-                  text: '${papel!.rotulo} (${papel!.parteNoContrato})',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            textAlign: alinhamento,
-            style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
-          ),
-          const SizedBox(height: 6),
-        ],
-        Text(
-          analise.nomeArquivo,
-          textAlign: alinhamento,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 2),
-        AppText.caption(detalhes, textAlign: alinhamento),
-      ],
-    );
-  }
-}
-
-/// "2 atendidos · 1 não atendido · 1 sem informação" + cobertura.
-class _Numeros extends StatelessWidget {
-  final Aderencia aderencia;
-  final bool centralizado;
-
-  const _Numeros({required this.aderencia, required this.centralizado});
-
-  @override
-  Widget build(BuildContext context) {
-    final a = aderencia;
-    return Column(
-      crossAxisAlignment: centralizado ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          alignment: centralizado ? WrapAlignment.center : WrapAlignment.start,
-          spacing: 8,
-          runSpacing: 6,
-          children: [
-            AppBadge(label: '${a.atendidos} atendidos', color: AppColors.success),
-            if (a.naoAtendidos > 0)
+          Wrap(
+            alignment: centralizado ? WrapAlignment.center : WrapAlignment.start,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
               AppBadge(
-                label: '${a.naoAtendidos} não ${a.naoAtendidos == 1 ? 'atendido' : 'atendidos'}',
-                color: AppColors.danger,
+                label: '${a.atendidos} ${a.atendidos == 1 ? 'atendido' : 'atendidos'}',
+                color: AppColors.success,
               ),
-            if (a.desconhecidos > 0)
-              AppBadge(label: '${a.desconhecidos} sem informação', color: AppColors.textSecondary),
-          ],
-        ),
-        if (a.cobertura != null) ...[
-          const SizedBox(height: 6),
-          AppText.caption(
-            'A IA conseguiu avaliar ${a.avaliados} de ${a.total} requisitos '
-            '(cobertura de ${a.cobertura}%).',
-            textAlign: centralizado ? TextAlign.center : TextAlign.start,
+              if (a.naoAtendidos > 0)
+                AppBadge(
+                  label: '${a.naoAtendidos} não ${a.naoAtendidos == 1 ? 'atendido' : 'atendidos'}',
+                  color: AppColors.danger,
+                ),
+              if (a.desconhecidos > 0)
+                AppBadge(label: '${a.desconhecidos} sem informação', color: AppColors.textSecondary),
+            ],
           ),
         ],
       ],
