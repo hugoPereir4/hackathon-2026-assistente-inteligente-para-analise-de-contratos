@@ -4,7 +4,7 @@ Dados da empresa logada. Não existe rota para listar empresas ou acessar outra 
 
 Base URL: `/api/v1/companies/`
 
-Todas as rotas exigem o header:
+Todas as rotas, exceto `GET /api/v1/companies/{cnpj}/`, exigem o header:
 
 ```
 Authorization: Bearer <access>
@@ -17,6 +17,7 @@ Veja como obter o token em [auth/docs/index.md](../../auth/docs/index.md).
 | GET    | `/api/v1/companies/me/`  | Retorna os dados da empresa logada |
 | PATCH  | `/api/v1/companies/me/`  | Atualiza um ou mais campos (inclusive a senha) |
 | DELETE | `/api/v1/companies/me/`  | Exclui a conta definitivamente   |
+| GET    | `/api/v1/companies/{cnpj}/` | Consulta o CNPJ na Receita para preencher o cadastro (pública) |
 
 > `PUT` não é aceito (responde `405`). Use `PATCH`.
 
@@ -110,6 +111,42 @@ Exclui a conta de forma definitiva, junto com todos os fatos e documentos da emp
 ### Resposta `204 No Content`
 
 Sem corpo. Depois disso, apague os tokens do front e mande o usuário para a tela de login.
+
+---
+
+## GET `/api/v1/companies/{cnpj}/`
+
+Consulta o CNPJ na [Minha Receita](https://minhareceita.org/) e devolve os dados com os mesmos nomes de campo do objeto `Company`, para o front preencher a tela de cadastro.
+
+- **Pública:** não precisa de `Authorization`, porque o usuário ainda não tem conta.
+- **Não salva nada.** Só consulta e devolve.
+- `{cnpj}` vai **sem a barra** (`/` quebra a URL). Pode mandar só os 14 caracteres (`33000167000101`) ou com pontos e traço (`33.000.1670001-01`).
+- Limite de 15 req/min por IP, como as outras rotas sem login.
+
+### Resposta `200 OK`
+
+```json
+{
+  "cnpj": "33000167000101",
+  "legal_name": "PETROLEO BRASILEIRO S A PETROBRAS",
+  "cnae_primary": "0600-0/01",
+  "company_size": "DEMAIS",
+  "founded_on": "1966-09-28",
+  "address_city": "RIO DE JANEIRO",
+  "address_state": "RJ"
+}
+```
+
+Qualquer campo pode vir `null` se a Receita não tiver o dado. `company_size` vem como a Receita informa: `"MICRO EMPRESA"`, `"EMPRESA DE PEQUENO PORTE"` ou `"DEMAIS"`.
+
+### Erros
+
+| Status | Quando |
+| ------ | ------ |
+| `400`  | CNPJ inválido (formato ou dígito verificador). Ex.: `{ "cnpj": ["CNPJ inválido."] }` |
+| `404`  | CNPJ válido, mas não encontrado na Receita. Ex.: `{ "detail": "CNPJ não encontrado na Receita." }` |
+| `429`  | Mais de 15 consultas por minuto. |
+| `502`  | A Minha Receita está fora do ar ou demorou mais de 10 s. Pode tentar de novo. |
 
 ---
 

@@ -26,7 +26,20 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Company
-        fields = ("id", "email", "password", "cnpj")
+        # Os campos além de email/password/cnpj são opcionais e vêm da
+        # consulta GET /companies/{cnpj}/ (Minha Receita).
+        fields = (
+            "id",
+            "email",
+            "password",
+            "cnpj",
+            "legal_name",
+            "cnae_primary",
+            "company_size",
+            "founded_on",
+            "address_city",
+            "address_state",
+        )
         read_only_fields = ("id",)
         extra_kwargs = {"email": {"validators": []}}
 

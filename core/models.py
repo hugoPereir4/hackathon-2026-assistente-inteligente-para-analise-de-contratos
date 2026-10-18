@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.core.validators import MaxValueValidator
 from django.db import models
@@ -141,3 +143,27 @@ class Document(Base):
 
     def __str__(self):
         return self.filename
+
+
+class DocumentAnswerBatch(Base):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        CONFIRMED = "confirmed", "Confirmed"
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="answer_batches")
+    analysis_fingerprint = models.CharField(max_length=64)
+    original_answers = models.JSONField()
+    proposals = models.JSONField()
+    fact_snapshots = models.JSONField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    approved_proposals = models.JSONField(default=list)
+    overwrite_authorizations = models.JSONField(default=list)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    reanalysis_status = models.CharField(
+        max_length=20, choices=Document.Status.choices, null=True, blank=True,
+    )
+    reanalysis_error = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "document_answer_batches"

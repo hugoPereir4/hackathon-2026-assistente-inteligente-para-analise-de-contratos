@@ -36,6 +36,15 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
+# Flutter web roda em outra origem (ex.: http://localhost:<porta>). A API usa
+# JWT no header, sem cookies, então em DEBUG liberamos qualquer origem.
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+CORS_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
 # Configurações de APIs externas
 GOOGLE_AI_API_KEY = os.getenv("GOOGLE_AI_API_KEY")
 GOOGLE_AI_MODEL = (os.getenv("GOOGLE_AI_MODEL") or "").strip() or "gemini-3.5-flash-lite"
@@ -53,10 +62,12 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'corsheaders',
     'core',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

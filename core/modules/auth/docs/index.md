@@ -41,12 +41,26 @@ Cria a empresa e já retorna os tokens, então não é preciso chamar o login em
 | `email`      | string | Sim         | Salvo em minúsculas. Deve ser único. |
 | `password`   | string | Sim         | Passa pelos validadores do Django: mínimo 8 caracteres, não pode ser só numérica, comum ou parecida com o email. |
 | `cnpj`       | string | Sim         | Aceita com ou sem pontuação (`12.345.678/0001-95` ou `12345678000195`), numérico ou alfanumérico. Salvo só com os 14 caracteres. Deve ser único. |
+| `legal_name`    | string | Não | Razão social. |
+| `cnae_primary`  | string | Não | CNAE principal (ex.: `"4721-1/02"`). |
+| `company_size`  | string | Não | Porte (ex.: `"MICRO EMPRESA"`). |
+| `founded_on`    | string | Não | Data de abertura, formato `YYYY-MM-DD`. |
+| `address_city`  | string | Não | |
+| `address_state` | string | Não | UF, máximo 2 caracteres. |
+
+Os campos opcionais são os que a rota `GET /api/v1/companies/{cnpj}/` devolve (consulta na Receita): o front pode chamar ela, preencher o formulário e mandar tudo junto aqui. Veja [company/docs/index.md](../../company/docs/index.md).
 
 ```json
 {
   "email": "contato@empresa.com.br",
   "password": "SenhaForte123",
-  "cnpj": "12.345.678/0001-95"
+  "cnpj": "68756612000142",
+  "legal_name": "68.756.612 JOSE JUNIOR WAROL SOARES",
+  "cnae_primary": "4721-1/02",
+  "company_size": "MICRO EMPRESA",
+  "founded_on": "2026-08-24",
+  "address_city": "SUMIDOURO",
+  "address_state": "RJ"
 }
 ```
 
@@ -57,7 +71,13 @@ Cria a empresa e já retorna os tokens, então não é preciso chamar o login em
   "user": {
     "id": 1,
     "email": "contato@empresa.com.br",
-    "cnpj": "12345678000195"
+    "cnpj": "68756612000142",
+    "legal_name": "68.756.612 JOSE JUNIOR WAROL SOARES",
+    "cnae_primary": "4721-1/02",
+    "company_size": "MICRO EMPRESA",
+    "founded_on": "2026-08-24",
+    "address_city": "SUMIDOURO",
+    "address_state": "RJ"
   },
   "access": "<jwt>",
   "refresh": "<jwt>"
