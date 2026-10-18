@@ -129,6 +129,11 @@ class _Numeros extends StatelessWidget {
           runSpacing: 6,
           children: [
             AppBadge(label: '${a.atendidos} atendidos', color: AppColors.success),
+            if (a.parcialmenteAtendidos > 0)
+              AppBadge(
+                label: '${a.parcialmenteAtendidos} parcialmente ${a.parcialmenteAtendidos == 1 ? 'atendido' : 'atendidos'}',
+                color: AppColors.warning,
+              ),
             if (a.naoAtendidos > 0)
               AppBadge(
                 label: '${a.naoAtendidos} não ${a.naoAtendidos == 1 ? 'atendido' : 'atendidos'}',

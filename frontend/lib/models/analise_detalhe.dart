@@ -185,6 +185,7 @@ class Aderencia {
   final int total;
   final int avaliados;
   final int atendidos;
+  final int parcialmenteAtendidos;
   final int naoAtendidos;
   final int desconhecidos;
 
@@ -194,6 +195,7 @@ class Aderencia {
     this.total = 0,
     this.avaliados = 0,
     this.atendidos = 0,
+    this.parcialmenteAtendidos = 0,
     this.naoAtendidos = 0,
     this.desconhecidos = 0,
   });
@@ -204,6 +206,7 @@ class Aderencia {
         total: _inteiro(json['total']) ?? 0,
         avaliados: _inteiro(json['avaliados']) ?? 0,
         atendidos: _inteiro(json['atendidos']) ?? 0,
+        parcialmenteAtendidos: _inteiro(json['parcialmente_atendidos']) ?? 0,
         naoAtendidos: _inteiro(json['nao_atendidos']) ?? 0,
         desconhecidos: _inteiro(json['desconhecidos']) ?? 0,
       );
@@ -318,11 +321,13 @@ class ValorFinanceiro {
 
 enum StatusRequisito {
   atendido,
+  parcialmenteAtendido,
   naoAtendido,
   indefinido;
 
   static StatusRequisito fromCodigo(String? codigo) => switch (codigo?.toLowerCase()) {
         'atende' || 'met' => atendido,
+        'parcialmente_atende' || 'partially_met' => parcialmenteAtendido,
         'nao_atende' || 'não_atende' || 'not_met' => naoAtendido,
         _ => indefinido,
       };

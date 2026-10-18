@@ -114,7 +114,10 @@ class AnaliseRecenteTile extends AdaptiveWidget {
       case StatusAnalise.erro:
         return const AppBadge(label: 'Falhou', color: AppColors.danger);
       case StatusAnalise.concluida:
-        final score = analise.matchScore ?? 0;
+        final score = analise.matchScore;
+        if (score == null) {
+          return const AppBadge(label: 'Sem dados', color: AppColors.textSecondary);
+        }
         return AppBadge(label: '$score% Match', color: MatchStyle.corDoScore(score));
     }
   }

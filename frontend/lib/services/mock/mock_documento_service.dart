@@ -221,12 +221,24 @@ class MockDocumentoService implements DocumentoService {
   void _recalcular(Map<String, dynamic> documento, Map<String, dynamic> analise) {
     final requisitos = (analise['requisitos'] as List).cast<Map<String, dynamic>>();
     final atendidos = requisitos.where((r) => r['resultado'] == 'atende').length;
+    final parcialmenteAtendidos =
+        requisitos.where((r) => r['resultado'] == 'parcialmente_atende').length;
     final naoAtendidos = requisitos.where((r) => r['resultado'] == 'nao_atende').length;
-    final avaliados = atendidos + naoAtendidos;
-    final score = avaliados == 0 ? null : (atendidos * 100 / avaliados).round();
-    final outcome = naoAtendidos > 0
+    final avaliados = atendidos + parcialmenteAtendidos + naoAtendidos;
+    final score = avaliados == 0
+        ? null
+        : ((atendidos + parcialmenteAtendidos * 0.5) * 100 / avaliados).round();
+    final obrigatorioNaoAtendido = requisitos.any(
+      (r) => r['obrigatorio'] == true && r['resultado'] == 'nao_atende',
+    );
+    final parcialObrigatorio = requisitos.any(
+      (r) => r['obrigatorio'] == true && r['resultado'] == 'parcialmente_atende',
+    );
+    final outcome = obrigatorioNaoAtendido
         ? 'incompatible'
-        : (avaliados < requisitos.length ? 'insufficient_data' : 'good_fit');
+        : (parcialObrigatorio
+            ? 'high_risk'
+            : (avaliados < requisitos.length ? 'insufficient_data' : 'good_fit'));
     analise
       ..['aderencia'] = {
         'score': score,
@@ -234,6 +246,7 @@ class MockDocumentoService implements DocumentoService {
         'total': requisitos.length,
         'avaliados': avaliados,
         'atendidos': atendidos,
+        'parcialmente_atendidos': parcialmenteAtendidos,
         'nao_atendidos': naoAtendidos,
         'desconhecidos': requisitos.length - avaliados,
       }

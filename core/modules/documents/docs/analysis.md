@@ -31,9 +31,9 @@ mesmo quando o provedor não aplica alguma restrição do schema.
 | `valores` | Itens com `descricao`, `categoria`, `moeda`, `montante`, `percentual`, `aproximado`, `evidencia`. Categorias: `valor_total`, `pagamento`, `multa`, `garantia`, `outro`. |
 | `obrigacoes` | Itens com `descricao`, `parte_responsavel`, `prazo_id`, `evidencia`. `prazo_id` é nulo ou referencia um item de `prazos`. |
 | `riscos` | Itens com `descricao`, `severidade` (`baixa`, `media`, `alta`, `critica`), `impacto`, `recomendacao`, `evidencia`. |
-| `requisitos` | Itens com `id`, `descricao`, `obrigatorio`, `resultado` (`atende`, `nao_atende`, `desconhecido`), `depende_papel`, `justificativa`, `evidencia`, `referencias_perfil`. |
+| `requisitos` | Itens com `id`, `descricao`, `obrigatorio`, `resultado` (`atende`, `parcialmente_atende`, `nao_atende`, `desconhecido`), `depende_papel`, `justificativa`, `evidencia`, `referencias_perfil`. |
 | `perguntas_pendentes` | Itens com `id`, `pergunta`, `requisito_ids`, `fato_chave`, `sobre_papel`, `destino`, `fato_rotulo`, `tipo_valor`. |
-| `aderencia` | `score`, `cobertura`, `total`, `avaliados`, `atendidos`, `nao_atendidos`, `desconhecidos`, calculados pelo backend. |
+| `aderencia` | `score`, `cobertura`, `total`, `avaliados`, `atendidos`, `parcialmente_atendidos`, `nao_atendidos`, `desconhecidos`, calculados pelo backend. |
 | `outcome` | Classificação calculada pelo backend. |
 | `metadados` | `analisado_em` (ISO com timezone), `modelo`, `contexto_empresa` (cópia exata do contexto enviado). |
 
@@ -52,6 +52,18 @@ Não há números de página, pois a extração atual não preserva essa informa
 Datas explícitas usam `YYYY-MM-DD`. Prazos relativos mantêm `data: null` quando
 o documento não informa uma data explícita; não há cálculo presumido da data.
 
+## Cobertura de requisitos
+
+Quando o texto extraído tem pelo menos 8.000 caracteres e a primeira análise
+encontra no máximo quatro requisitos, o backend faz uma segunda chamada focada
+em procurar critérios explícitos que ficaram de fora. Ela procura, entre outros,
+requisitos jurídicos, fiscais, técnicos, financeiros, certificações, equipe e
+condições de execução, preservando evidências literais e evitando repetições.
+Os itens adicionais passam pelas mesmas validações de evidência e perfil. Se a
+chamada falhar ou a resposta for inválida, a análise original continua. Esse passo
+condicional pode aumentar o tempo e o consumo de quota do Gemini em documentos
+longos com poucos requisitos iniciais.
+
 `montante` e `percentual` são strings decimais (por exemplo, `"123456789.90"`
 e `"10.00"`), ou `null`. Não passam por float. Aproximações são indicadas por
 `aproximado`; condições e fórmulas permanecem na descrição e no trecho original.
@@ -65,7 +77,7 @@ Cada entrada tem `chave`, `valor`, `origem`, `confirmado`; fatos têm também `r
 Os campos cadastrais usam origem `cadastro` e a confirmação global da empresa.
 Fatos preservam a origem (`user`, `cnpj_api`, `ai`) e sua confirmação individual.
 
-Conclusões `atende` ou `nao_atende` exigem referências existentes, não vazias e
+Conclusões `atende`, `parcialmente_atende` ou `nao_atende` exigem referências existentes, não vazias e
 confirmadas, sem origem `ai`. O valor booleano `false` é preservado como dado
 explícito. Não confundir um fato ausente com uma negativa.
 Quando o requisito depende do papel da empresa, esse papel precisa estar resolvido.
@@ -90,19 +102,22 @@ o resultado não é uma certificação automática de habilitação.
 
 ## Nota e classificação
 
-Todos os requisitos têm peso igual, incluindo os opcionais.
-`score = 100 × atendidos / avaliados`; `cobertura = 100 × avaliados / total`.
+Todos os requisitos têm peso igual, incluindo os opcionais. Um requisito
+`parcialmente_atende` conta como meio requisito atendido:
+`score = 100 × (atendidos + 0,5 × parcialmente_atendidos) / avaliados`;
+`cobertura = 100 × avaliados / total`.
 Percentuais são arredondados ao inteiro mais próximo, com meio ponto para cima.
-Requisitos desconhecidos não entram na nota. Sem avaliados, score é `null`;
+Requisitos desconhecidos não entram na nota nem no denominador do score, mas
+reduzem a cobertura. Sem avaliados, score é `null`;
 sem requisitos, cobertura também é `null`.
 
-Exemplo: um requisito atendido, um não atendido e um desconhecido resultam em
-score `50`, cobertura `67`, total `3` e avaliados `2`.
+Exemplo: um requisito atendido, um parcialmente atendido, um não atendido e um
+desconhecido resultam em score `50`, cobertura `75`, total `4` e avaliados `3`.
 
 Prioridade de classificação:
 
 1. `incompatible`: requisito obrigatório comprovadamente não atendido.
-2. `high_risk`: risco alto ou crítico.
+2. `high_risk`: requisito obrigatório parcialmente atendido ou risco alto/crítico.
 3. `insufficient_data`: requisito desconhecido, papel desconhecido ou nenhum requisito avaliável.
 4. `good_fit`: demais casos; um requisito opcional não atendido reduz a nota sem impor incompatibilidade.
 

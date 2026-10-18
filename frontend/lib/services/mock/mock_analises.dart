@@ -51,8 +51,10 @@ abstract final class MockAnalises {
       },
     ];
     final atendidos = requisitos.where((r) => r['resultado'] == 'atende').length;
+    final parcialmenteAtendidos =
+        requisitos.where((r) => r['resultado'] == 'parcialmente_atende').length;
     final naoAtendidos = requisitos.where((r) => r['resultado'] == 'nao_atende').length;
-    final desconhecidos = requisitos.length - atendidos - naoAtendidos;
+    final desconhecidos = requisitos.length - atendidos - parcialmenteAtendidos - naoAtendidos;
 
     return {
       'schema_version': 2,
@@ -186,6 +188,7 @@ abstract final class MockAnalises {
         'total': requisitos.length,
         'avaliados': requisitos.length - desconhecidos,
         'atendidos': atendidos,
+        'parcialmente_atendidos': parcialmenteAtendidos,
         'nao_atendidos': naoAtendidos,
         'desconhecidos': desconhecidos,
       },

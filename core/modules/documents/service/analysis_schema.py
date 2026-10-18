@@ -73,7 +73,7 @@ class Requirement(Schema):
     id: Text
     descricao: Text
     obrigatorio: bool
-    resultado: Literal["atende", "nao_atende", "desconhecido"]
+    resultado: Literal["atende", "parcialmente_atende", "nao_atende", "desconhecido"]
     depende_papel: bool
     justificativa: Text
     evidencia: Evidence
@@ -100,6 +100,11 @@ class DocumentAnalysis(Schema):
     riscos: list[Risk]
     requisitos: list[Requirement]
     perguntas_pendentes: list[Question]
+
+
+class RequirementsAudit(Schema):
+    requisitos_adicionais: list[Requirement]
+    perguntas_adicionais: list[Question]
 
 
 class InterpretedAnswer(Schema):

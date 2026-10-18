@@ -14,11 +14,13 @@ import httpx
 from pydantic import ValidationError
 
 from core.models import Company, CompanyFact, Document
-from .analysis_schema import DocumentAnalysis, EvidenceCorrections, Question
+from .analysis_schema import DocumentAnalysis, EvidenceCorrections, Question, RequirementsAudit
 from .diagnostics import capture_analysis, is_capturing, record
 
 logger = logging.getLogger(__name__)
 MODEL_NAME = "gemini-3.5-flash-lite"
+REQUIREMENTS_AUDIT_MIN_TEXT_CHARS = 8_000
+REQUIREMENTS_AUDIT_MAX_EXISTING = 4
 
 SYSTEM_INSTRUCTION = """
 Atue como analista de contratos e licitações. Responda em português conforme o schema.
@@ -40,7 +42,10 @@ Compare usando apenas referências existentes no contexto (cadastro.campo ou
 fatos.fact_key). Dados não confirmados e fatos de origem ai não comprovam nada.
 Sem evidências confirmadas suficientes, use desconhecido, nunca nao_atende.
 Uma obrigação prevista no contrato não comprova que a empresa a cumpre.
-Nunca use atende ou nao_atende com referencias_perfil vazias.
+Use parcialmente_atende quando dados confirmados mostrarem que a empresa cumpre
+parte de um requisito composto ou um valor abaixo do exigido, mas não todo ele.
+Não use essa opção por evidência incompleta, citação parcial ou mera incerteza.
+Use referências de perfil confirmadas para atende, parcialmente_atende ou nao_atende.
 Não infira certificações, receita ou experiência pelo CNAE, porte ou fundação.
 Um fato booleano confirmado false é uma negativa explícita; fato ausente é desconhecido.
 Para requisitos desconhecidos, gere perguntas concretas e agrupe os que dependem
@@ -59,6 +64,31 @@ Datas explícitas usam YYYY-MM-DD; prazos relativos preservam o evento de refer�
 Montantes e percentuais são strings decimais sem separador de milhar (ex.: "1500.50").
 Preserve aproximações e condições na descrição e evidência, sinalizando aproximado.
 Não calcule score, cobertura, outcome nem metadados: isso é responsabilidade do backend.
+"""
+
+
+REQUIREMENTS_AUDIT_INSTRUCTION = """
+VocÃª faz uma segunda varredura EXCLUSIVA de requisitos do documento. A lista
+requisitos_existentes jÃ¡ foi extraÃda; retorne somente requisitos relevantes e
+explÃcitos que estejam faltando, sem repetir um requisito existente nem inventar
+exigÃªncias. NÃ£o retorne resumo, obrigaÃ§Ãµes genÃ©ricas, riscos, prazos ou valores.
+
+Leia o documento inteiro e procure condiÃ§Ãµes objetivas que a empresa precisa
+cumprir ou demonstrar, obrigatÃ³rias ou opcionais. Verifique, quando constarem no
+texto, habilitaÃ§Ã£o jurÃdica, regularidade fiscal e trabalhista, qualificaÃ§Ã£o
+tÃ©cnica, experiÃªncia, certificaÃ§Ãµes, capacidade econÃ´mico-financeira, equipe,
+entregas e nÃveis de serviÃ§o, seguranÃ§a/confidencialidade e outras condiÃ§Ãµes
+especÃficas. Divida requisitos compostos em critÃ©rios independentes e verificÃ¡veis.
+Inclua apenas os que tenham evidÃªncia literal no documento; evidÃªncia deve ser um
+trecho contÃnuo e curto. NÃ£o transforme cada frase contratual em requisito.
+
+Mantenha as regras de comparaÃ§Ã£o: use apenas referÃªncias existentes e confirmadas
+do perfil. Uma obrigaÃ§Ã£o escrita no contrato nÃ£o prova que a empresa jÃ¡ a cumpre.
+Use desconhecido e crie uma pergunta concreta quando faltarem dados. Para cada
+requisito adicional, preencha se depende do papel e gere IDs novos. Perguntas
+adicionais devem apontar apenas aos IDs dos requisitos adicionais desconhecidos.
+Respeite o papel_empresa informado. Retorne listas vazias quando nÃ£o houver
+requisitos adicionais com evidÃªncia explÃcita.
 """
 
 
@@ -338,11 +368,14 @@ def _percentage(part, total):
 def calculate_adherence(analysis):
     total = len(analysis.requisitos)
     met = sum(r.resultado == "atende" for r in analysis.requisitos)
+    partial = sum(r.resultado == "parcialmente_atende" for r in analysis.requisitos)
     unmet = sum(r.resultado == "nao_atende" for r in analysis.requisitos)
-    evaluated = met + unmet
+    evaluated = met + partial + unmet
     unknown = total - evaluated
     if any(r.obrigatorio and r.resultado == "nao_atende" for r in analysis.requisitos):
         outcome = Document.Outcome.INCOMPATIBLE
+    elif any(r.obrigatorio and r.resultado == "parcialmente_atende" for r in analysis.requisitos):
+        outcome = Document.Outcome.HIGH_RISK
     elif any(r.severidade in ("alta", "critica") for r in analysis.riscos):
         outcome = Document.Outcome.HIGH_RISK
     elif unknown or analysis.papel_empresa.papel == "desconhecido" or not evaluated:
@@ -350,9 +383,10 @@ def calculate_adherence(analysis):
     else:
         outcome = Document.Outcome.GOOD_FIT
     return {
-        "score": _percentage(met, evaluated), "cobertura": _percentage(evaluated, total),
+        "score": _percentage(Decimal(met) + Decimal(partial) / Decimal(2), evaluated),
+        "cobertura": _percentage(evaluated, total),
         "total": total, "avaliados": evaluated, "atendidos": met,
-        "nao_atendidos": unmet, "desconhecidos": unknown,
+        "parcialmente_atendidos": partial, "nao_atendidos": unmet, "desconhecidos": unknown,
     }, outcome
 
 
@@ -472,8 +506,100 @@ def generate_validated_analysis(document, context):
         )
         analysis = _repair_analysis_evidence(analysis, document.text_content, exc.paths)
         validate_analysis(analysis, document.text_content, context)
+    analysis = audit_additional_requirements(document, analysis, context)
     record("validated")
     return analysis, model
+
+
+def audit_additional_requirements(document, analysis, context):
+    """Faz uma varredura focada quando o documento Ã© longo e a lista Ã© curta."""
+    text = document.text_content or ""
+    if (len(text) < REQUIREMENTS_AUDIT_MIN_TEXT_CHARS
+            or len(analysis.requisitos) > REQUIREMENTS_AUDIT_MAX_EXISTING):
+        return analysis
+
+    initial_count = len(analysis.requisitos)
+    record("requirements_audit_started", text_chars=len(text), existing=initial_count)
+    try:
+        audit, _ = generate_structured(
+            instruction=REQUIREMENTS_AUDIT_INSTRUCTION,
+            data={
+                "documento": {"tipo": document.doc_type, "texto": text},
+                "contexto_empresa": context,
+                "papel_empresa": analysis.papel_empresa.model_dump(mode="json"),
+                "requisitos_existentes": [r.model_dump(mode="json") for r in analysis.requisitos],
+            }, schema=RequirementsAudit,
+        )
+        reviewed = reconcile_untrusted_conclusions(
+            merge_requirements_audit(analysis, audit), context,
+        )
+        validate_analysis(reviewed, text, context)
+    except AIAnalysisError as exc:
+        logger.warning("Auditoria adicional de requisitos ignorada no documento %s: %s", document.pk, exc)
+        record("requirements_audit_fallback", reason=str(exc))
+        return analysis
+
+    record("requirements_audit_completed", initial=initial_count,
+           added=len(reviewed.requisitos) - initial_count)
+    return reviewed
+
+
+def merge_requirements_audit(analysis, audit):
+    """Mescla requisitos adicionais, deduplicando descriÃ§Ãµes e agrupando perguntas."""
+    result = analysis.model_copy(deep=True)
+    _unique_ids(audit.requisitos_adicionais)
+    known = {_normalize(r.descricao).casefold(): r for r in result.requisitos}
+    used_ids = {r.id for r in result.requisitos}
+    id_map = {}
+
+    for requirement in audit.requisitos_adicionais:
+        key = _normalize(requirement.descricao).casefold()
+        if key in known:
+            id_map[requirement.id] = known[key].id
+            continue
+        digest = sha256(key.encode("utf-8")).hexdigest()[:16]
+        requirement_id = f"extra_{digest}"
+        suffix = 2
+        while requirement_id in used_ids:
+            requirement_id = f"extra_{digest}_{suffix}"
+            suffix += 1
+        used_ids.add(requirement_id)
+        id_map[requirement.id] = requirement_id
+        merged = requirement.model_copy(update={"id": requirement_id})
+        result.requisitos.append(merged)
+        known[key] = merged
+
+    question_groups = {
+        (question.destino, question.fato_chave): question
+        for question in result.perguntas_pendentes
+    }
+    used_question_ids = {question.id for question in result.perguntas_pendentes}
+    unknown_ids = {r.id for r in result.requisitos if r.resultado == "desconhecido"}
+    for question in audit.perguntas_adicionais:
+        requirement_ids = list(dict.fromkeys(
+            id_map[req_id] for req_id in question.requisito_ids if req_id in id_map
+        ))
+        requirement_ids = [req_id for req_id in requirement_ids if req_id in unknown_ids]
+        if not requirement_ids and not question.sobre_papel:
+            continue
+        group = (question.destino, question.fato_chave)
+        existing = question_groups.get(group)
+        if existing:
+            existing.requisito_ids = list(dict.fromkeys(existing.requisito_ids + requirement_ids))
+            continue
+        question_id = question.id
+        if question_id in used_question_ids:
+            question_id = f"extra_{question_id}"
+        while question_id in used_question_ids:
+            question_id += "_nova"
+        used_question_ids.add(question_id)
+        merged_question = question.model_copy(update={
+            "id": question_id,
+            "requisito_ids": requirement_ids,
+        })
+        result.perguntas_pendentes.append(merged_question)
+        question_groups[group] = merged_question
+    return result
 
 
 def _run_claimed_analysis(document: Document) -> None:
